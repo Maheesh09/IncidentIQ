@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from database import engine
 from routers import incidents, reports
 
 logger = logging.getLogger(__name__)
@@ -15,13 +16,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown events.
 
-    Startup: initialise connections and resources.
-    Shutdown: cleanly close connections.
+    Startup: connection pool is created automatically by SQLAlchemy.
+    Shutdown: all connections in the pool are closed cleanly.
     """
     logger.info("IncidentIQ starting up")
-    # Database connection pool will be initialised here in the next step
     yield
-    logger.info("IncidentIQ shutting down")
+    await engine.dispose()
+    logger.info("IncidentIQ shutting down — database connections released")
 
 
 app = FastAPI(
