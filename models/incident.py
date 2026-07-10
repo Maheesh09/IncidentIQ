@@ -42,3 +42,26 @@ class Incident(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         String(50), nullable=False, server_default=func.now()
     )
+
+class AgentRun(Base):
+    """ORM model for the agent_runs table.
+
+    One row per agent per incident. Tracks what each agent found,
+    how long it took, and whether it succeeded or errored.
+    """
+
+    __tablename__ = "agent_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    incident_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("incidents.id"), nullable=False
+    )
+    agent_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    findings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    completed_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)    

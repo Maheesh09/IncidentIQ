@@ -11,7 +11,7 @@ from alembic import context
 
 from config import settings
 from database import Base
-from models.incident import Incident  # noqa: F401
+from models.incident import AgentRun, Incident  # noqa: F401
 
 config = context.config
 
