@@ -89,3 +89,26 @@ class RCAReport(Base):
     generated_at: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default=func.now()
     )    
+
+class Feedback(Base):
+    """ORM model for the feedback table.
+
+    One row per incident (enforced by unique=True on incident_id).
+    Stores SRE confirmation or rejection of the RCA hypothesis.
+    Used in Phase 2 to calibrate synthesis agent prompts.
+    """
+
+    __tablename__ = "feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    incident_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("incidents.id"), unique=True, nullable=False
+    )
+    hypothesis_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    actual_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )    
