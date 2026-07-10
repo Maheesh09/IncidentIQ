@@ -64,4 +64,28 @@ class AgentRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     completed_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)    
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+class RCAReport(Base):
+    """ORM model for the rca_reports table.
+
+    One row per incident (enforced by unique=True on incident_id).
+    Stores the final structured RCA report produced by the Report Agent.
+    """
+
+    __tablename__ = "rca_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    incident_id: Mapped[str] = mapped_column(
+        String(30), ForeignKey("incidents.id"), unique=True, nullable=False
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    timeline: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    hypotheses: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    prevention_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    generated_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )    
