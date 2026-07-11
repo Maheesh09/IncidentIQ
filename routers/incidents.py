@@ -163,3 +163,64 @@ async def get_incident_status(
         started_at=incident.started_at,
         elapsed_seconds=elapsed_seconds,
     )
+
+@router.get("/{incident_id}/report", response_model=RCAReportResponse, status_code=200)
+async def get_incident_report(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> RCAReportResponse:
+    """Retrieve the final RCA report for a completed incident.
+
+    Only available when incident status is 'completed'.
+    Returns 409 if analysis is still in progress.
+    """
+    # Fetch the incident
+    result = await db.execute(select(Incident).where(Incident.id == incident_id))
+    incident = result.scalar_one_or_none()
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident {incident_id} not found"
+        )
+
+    if incident.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Report not yet available — incident status is '{incident.status}'"
+        )
+
+    # Fetch the RCA report
+    report_result = await db.execute(
+        select(RCAReport).where(RCAReport.incident_id == incident_id)
+    )
+    report = report_result.scalar_one_or_none()
+
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Report for incident {incident_id} not found"
+        )
+
+    # Build hypothesis objects from JSONB data
+    hypotheses = [
+        HypothesisSchema(
+            rank=h["rank"],
+            confidence=h["confidence"],
+            root_cause=h["root_cause"],
+            evidence=h["evidence"],
+            reasoning=h["reasoning"],
+        )
+        for h in report.hypotheses
+    ]
+
+    return RCAReportResponse(
+        incident_id=incident_id,
+        summary=report.summary,
+        timeline=report.timeline,
+        root_causes=hypotheses,
+        immediate_fix=report.raw_report.get("immediate_fix") if report.raw_report else None,
+        prevention_note=report.prevention_note,
+        generated_at=report.generated_at,
+        analysis_duration_seconds=incident.analysis_duration_seconds,
+    )
