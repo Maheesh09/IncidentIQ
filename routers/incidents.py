@@ -61,3 +61,53 @@ async def create_incident(
         status="pending",
         message="Incident created. Upload logs via POST /incidents/{id}/logs to start analysis.",
     )
+
+@router.post("/{incident_id}/logs", response_model=LogUploadResponse, status_code=200)
+async def upload_logs(
+    incident_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> LogUploadResponse:
+    """Upload a raw log file for an existing incident.
+
+    Stores the log content on the incident record and updates
+    status to 'processing' to trigger the analysis pipeline.
+    """
+    # Verify the incident exists
+    result = await db.execute(select(Incident).where(Incident.id == incident_id))
+    incident = result.scalar_one_or_none()
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident {incident_id} not found"
+        )
+
+    if incident.status not in ("pending",):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Incident {incident_id} already has logs uploaded"
+        )
+
+    # Read and validate file size
+    content = await file.read()
+    log_size_bytes = len(content)
+
+    if log_size_bytes > settings.max_log_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Log file exceeds maximum size of {settings.max_log_size_bytes // (1024 * 1024)}MB"
+        )
+
+    # Store log content and update status
+    incident.investigation_window = {"raw_logs": content.decode("utf-8", errors="replace")}
+    incident.status = "processing"
+    incident.started_at = datetime.now(timezone.utc).isoformat()
+
+    logger.info(f"Logs uploaded for incident {incident_id} — {log_size_bytes} bytes")
+
+    return LogUploadResponse(
+        incident_id=incident_id,
+        log_size_bytes=log_size_bytes,
+        status="processing",
+    )
