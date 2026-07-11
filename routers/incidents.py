@@ -111,3 +111,55 @@ async def upload_logs(
         log_size_bytes=log_size_bytes,
         status="processing",
     )
+
+@router.get("/{incident_id}", response_model=IncidentStatusResponse, status_code=200)
+async def get_incident_status(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> IncidentStatusResponse:
+    """Poll the current analysis status of an incident.
+
+    Returns pipeline progress including which agents have completed
+    and which are still pending.
+    """
+    # Fetch the incident
+    result = await db.execute(select(Incident).where(Incident.id == incident_id))
+    incident = result.scalar_one_or_none()
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident {incident_id} not found"
+        )
+
+    # Fetch all agent runs for this incident
+    agent_result = await db.execute(
+        select(AgentRun).where(AgentRun.incident_id == incident_id)
+    )
+    agent_runs = agent_result.scalars().all()
+
+    # Calculate completed and pending agents
+    all_agents = ["triage", "log_analysis", "deploy_correlation", "synthesis", "report"]
+    completed = [run.agent_type for run in agent_runs if run.status == "completed"]
+    pending = [agent for agent in all_agents if agent not in completed]
+    current_agent = next(
+        (run.agent_type for run in agent_runs if run.status == "running"), None
+    )
+
+    # Calculate elapsed seconds
+    elapsed_seconds = None
+    if incident.started_at:
+        started = datetime.fromisoformat(incident.started_at)
+        elapsed_seconds = int(
+            (datetime.now(timezone.utc) - started).total_seconds()
+        )
+
+    return IncidentStatusResponse(
+        incident_id=incident_id,
+        status=incident.status,
+        current_agent=current_agent,
+        agents_completed=completed,
+        agents_pending=pending,
+        started_at=incident.started_at,
+        elapsed_seconds=elapsed_seconds,
+    )
