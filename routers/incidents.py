@@ -224,3 +224,69 @@ async def get_incident_report(
         generated_at=report.generated_at,
         analysis_duration_seconds=incident.analysis_duration_seconds,
     )
+
+@router.post("/{incident_id}/feedback", response_model=FeedbackResponse, status_code=200)
+async def submit_feedback(
+    incident_id: str,
+    request: FeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+) -> FeedbackResponse:
+    """Submit SRE feedback on an RCA report.
+
+    Confirms or rejects the hypothesis after the incident is resolved.
+    Used in Phase 2 to calibrate synthesis agent prompts.
+    """
+    # Fetch the incident
+    result = await db.execute(select(Incident).where(Incident.id == incident_id))
+    incident = result.scalar_one_or_none()
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident {incident_id} not found"
+        )
+
+    if incident.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Feedback can only be submitted for completed incidents"
+        )
+
+    # Check feedback hasn't already been submitted
+    feedback_result = await db.execute(
+        select(Feedback).where(Feedback.incident_id == incident_id)
+    )
+    existing_feedback = feedback_result.scalar_one_or_none()
+
+    if existing_feedback is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Feedback already submitted for incident {incident_id}"
+        )
+
+    # Cross-field validation
+    if request.verdict == "rejected" and not request.actual_cause:
+        raise HTTPException(
+            status_code=400,
+            detail="actual_cause is required when verdict is 'rejected'"
+        )
+
+    # Store feedback
+    feedback = Feedback(
+        incident_id=incident_id,
+        hypothesis_rank=request.hypothesis_rank,
+        verdict=request.verdict,
+        actual_cause=request.actual_cause,
+        submitted_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(feedback)
+
+    logger.info(
+        f"Feedback recorded for incident {incident_id} — "
+        f"verdict: {request.verdict}, rank: {request.hypothesis_rank}"
+    )
+
+    return FeedbackResponse(
+        incident_id=incident_id,
+        feedback_recorded=True,
+    )
