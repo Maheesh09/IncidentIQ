@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import AsyncSessionLocal
@@ -78,7 +79,7 @@ async def run_pipeline(
 
             # Update incident status to completed
             result = await db.execute(
-                __import__("sqlalchemy").select(Incident).where(
+                select(Incident).where(
                     Incident.id == incident_id
                 )
             )
@@ -108,7 +109,7 @@ async def run_pipeline(
             # Mark the incident as failed in the database
             try:
                 result = await db.execute(
-                    __import__("sqlalchemy").select(Incident).where(
+                    select(Incident).where(
                         Incident.id == incident_id
                     )
                 )
