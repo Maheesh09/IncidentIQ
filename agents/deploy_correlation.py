@@ -45,6 +45,7 @@ async def _reason_over_deploys(
     """
     if not commits:
         return {
+            "most_likely_commit_sha": None,
             "correlation_confidence": 0.0,
             "verdict": "No deployments found in the investigation window",
             "reasoning": "No commits were detected in the investigation window",

@@ -1,0 +1,22 @@
+2026-07-03T14:30:01Z INFO  auth-service Starting up
+2026-07-03T14:30:02Z INFO  auth-service Connected to Redis pool (size=10)
+2026-07-03T14:31:00Z INFO  auth-service Deploy a3f9c12 completed
+2026-07-03T14:31:05Z INFO  auth-service Redis pool reconfigured (size=2)
+2026-07-03T14:32:58Z INFO  auth-service Received 142 requests
+2026-07-03T14:33:12Z ERROR auth-service NullPointerException in AuthController.java:142
+2026-07-03T14:33:12Z ERROR auth-service Redis connection pool exhausted
+2026-07-03T14:33:13Z ERROR auth-service NullPointerException in AuthController.java:142
+2026-07-03T14:33:13Z ERROR auth-service Redis connection pool exhausted
+2026-07-03T14:33:14Z FATAL auth-service Failed to acquire Redis connection after 3 retries
+Traceback (most recent call last):
+  File "AuthController.java", line 142, in handleRequest
+    RedisConnection conn = pool.acquire()
+NullPointerException: pool returned null connection
+2026-07-03T14:33:15Z ERROR auth-service NullPointerException in AuthController.java:142
+2026-07-03T14:33:15Z ERROR auth-service Redis connection pool exhausted
+2026-07-03T14:33:16Z ERROR auth-service NullPointerException in AuthController.java:142
+2026-07-03T14:33:17Z ERROR auth-service Redis connection pool exhausted
+2026-07-03T14:33:18Z FATAL auth-service Service degraded — returning 500 to all requests
+2026-07-03T14:33:19Z ERROR auth-service NullPointerException in AuthController.java:142
+2026-07-03T14:33:20Z ERROR auth-service Redis connection pool exhausted
+2026-07-03T14:35:00Z ERROR auth-service 847 requests failed in last 2 minutes

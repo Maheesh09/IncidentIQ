@@ -5,7 +5,8 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from pipeline.runner import run_pipeline
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,13 +66,15 @@ async def create_incident(
 @router.post("/{incident_id}/logs", response_model=LogUploadResponse, status_code=200)
 async def upload_logs(
     incident_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> LogUploadResponse:
     """Upload a raw log file for an existing incident.
 
-    Stores the log content on the incident record and updates
-    status to 'processing' to trigger the analysis pipeline.
+    Stores the log content on the incident record, updates status
+    to 'processing', and triggers the LangGraph pipeline as a
+    background task.
     """
     # Verify the incident exists
     result = await db.execute(select(Incident).where(Incident.id == incident_id))
@@ -99,12 +102,30 @@ async def upload_logs(
             detail=f"Log file exceeds maximum size of {settings.max_log_size_bytes // (1024 * 1024)}MB"
         )
 
-    # Store log content and update status
-    incident.investigation_window = {"raw_logs": content.decode("utf-8", errors="replace")}
+    # Decode log content
+    raw_logs = content.decode("utf-8", errors="replace")
+
+    # Update incident status and store started_at
     incident.status = "processing"
     incident.started_at = datetime.now(timezone.utc).isoformat()
 
-    logger.info(f"Logs uploaded for incident {incident_id} — {log_size_bytes} bytes")
+    # Flush so the status update is visible before pipeline starts
+    await db.flush()
+
+    # Trigger the pipeline as a background task
+    background_tasks.add_task(
+        run_pipeline,
+        incident_id=incident_id,
+        description=incident.description,
+        raw_logs=raw_logs,
+        github_repo_url=incident.github_repo_url,
+        reported_at=incident.reported_at,
+    )
+
+    logger.info(
+        f"Logs uploaded for incident {incident_id} — "
+        f"{log_size_bytes} bytes — pipeline queued"
+    )
 
     return LogUploadResponse(
         incident_id=incident_id,
