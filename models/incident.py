@@ -43,6 +43,114 @@ class Incident(Base):
         String(50), nullable=False, server_default=func.now()
     )
 
+class Organisation(Base):
+    """ORM model for the organisations table.
+
+    One row per customer organisation using IncidentIQ as a service.
+    All incidents, reports, and feedback are scoped to an organisation.
+    """
+
+    __tablename__ = "organisations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+    created_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )
+
+class APIKey(Base):
+    """ORM model for the api_keys table.
+
+    Each organisation can have multiple API keys.
+    Keys are hashed before storage — the raw key is shown only once
+    at creation time and never stored in plaintext.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    key_prefix: Mapped[str] = mapped_column(String(12), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )
+    last_used_at: Mapped[str | None] = mapped_column(String(50), nullable=True)        
+
+class LogSourceConfig(Base):
+    """ORM model for the log_source_configs table.
+
+    Stores how to fetch logs for each organisation.
+    Credentials are stored in Google Cloud Secret Manager —
+    only the secret name is stored here, never the credentials themselves.
+    """
+
+    __tablename__ = "log_source_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        unique=True,
+        nullable=False,
+    )
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    secret_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    config_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+class WebhookConfig(Base):
+    """ORM model for the webhook_configs table.
+
+    Stores where to deliver RCA reports for each organisation.
+    When the pipeline completes, IncidentIQ POSTs the report
+    to the customer's configured webhook URL.
+    """
+
+    __tablename__ = "webhook_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        unique=True,
+        nullable=False,
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    secret: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_delivered_at: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
+    last_delivery_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
+    
 class AgentRun(Base):
     """ORM model for the agent_runs table.
 
