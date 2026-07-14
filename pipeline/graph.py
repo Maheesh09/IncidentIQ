@@ -10,6 +10,7 @@ from agents.log_analysis import analyze_logs_node
 from agents.deploy_correlation import correlate_deploys_node
 from agents.synthesis import synthesize_node
 from agents.report import generate_report_node
+from pipeline.retry import with_retry
 from pipeline.state import IncidentState
 
 logger = logging.getLogger(__name__)
@@ -27,14 +28,14 @@ def build_graph() -> StateGraph:
     """
     graph = StateGraph(IncidentState)
 
-    # Register all agent nodes
-    graph.add_node("triage", triage_node)
-    graph.add_node("analyze_logs", analyze_logs_node)
-    graph.add_node("correlate_deploys", correlate_deploys_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_node("generate_report", generate_report_node)
+    # Register all agent nodes with retry wrapper
+    graph.add_node("triage", with_retry(triage_node))
+    graph.add_node("analyze_logs", with_retry(analyze_logs_node))
+    graph.add_node("correlate_deploys", with_retry(correlate_deploys_node))
+    graph.add_node("synthesize", with_retry(synthesize_node))
+    graph.add_node("generate_report", with_retry(generate_report_node))
 
-    # Set the entry point — triage always runs first
+    # Set the entry point
     graph.set_entry_point("triage")
 
     # Fan-out — triage finishes, then both agents run in parallel
@@ -47,16 +48,11 @@ def build_graph() -> StateGraph:
     # Linear — synthesis finishes, then report generates
     graph.add_edge("synthesize", "generate_report")
 
-    # Terminal edge — report is the last node
+    # Terminal edge
     graph.add_edge("generate_report", END)
 
-    # Compile the graph — validates all edges and nodes are connected
     compiled = graph.compile()
-
-    logger.info("LangGraph pipeline compiled successfully")
-    return compiled
-
-    return graph
-
     
+    logger.info("LangGraph pipeline compiled successfully")
 
+    return compiled

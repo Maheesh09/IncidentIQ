@@ -1,6 +1,7 @@
 # tools/github_client.py
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import TypedDict
@@ -97,20 +98,11 @@ async def fetch_commits_in_window(
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
         try:
-            response = await client.get(url, params=params)
-
-            if response.status_code == 404:
-                raise GitHubNotFoundError(
-                    f"Repository not found: {github_repo_url}"
-                )
-            if response.status_code == 403:
-                raise GitHubRateLimitError(
-                    "GitHub API rate limit exceeded"
-                )
-            if response.status_code != 200:
-                raise GitHubClientError(
-                    f"GitHub API error {response.status_code}: {response.text}"
-                )
+            response = await _request_with_backoff(
+                client=client,
+                url=url,
+                params=params,
+            )
 
             commits_data = response.json()
             commits: list[CommitInfo] = []
@@ -119,12 +111,9 @@ async def fetch_commits_in_window(
                 sha = commit["sha"]
                 short_sha = sha[:7]
 
-                # Fetch detailed file changes for this commit
                 changed_files, additions, deletions = await _fetch_commit_files(
                     client, repo_path, sha
                 )
-
-                # Detect risk signals from changed files
                 risk_signals = _detect_risk_signals(changed_files)
 
                 commits.append(CommitInfo(
@@ -145,9 +134,11 @@ async def fetch_commits_in_window(
             )
             return commits
 
+        except (GitHubNotFoundError, GitHubRateLimitError, GitHubClientError):
+            raise
         except httpx.TimeoutException:
             raise GitHubClientError(
-                f"GitHub API request timed out for {github_repo_url}"
+                f"GitHub API request timed out for {repo_path}"
             )
 
 
@@ -241,3 +232,68 @@ def calculate_time_to_first_error(
             f"first_error={first_error_timestamp}"
         )
         return None
+    
+async def _request_with_backoff(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict | None = None,
+    max_retries: int = 3,
+) -> httpx.Response:
+    """Make a GET request with exponential backoff on rate limit errors.
+
+    Waits 2, 4, then 8 seconds between retries when GitHub returns 403.
+    Raises GitHubRateLimitError if all retries are exhausted.
+
+    Args:
+        client: Active httpx AsyncClient with auth headers.
+        url: Full GitHub API URL to request.
+        params: Optional query parameters.
+        max_retries: Maximum number of retry attempts.
+
+    Returns:
+        Successful httpx Response object.
+
+    Raises:
+        GitHubRateLimitError: If rate limit persists after all retries.
+        GitHubNotFoundError: If the resource does not exist.
+        GitHubClientError: For any other non-retryable error.
+    """
+    for attempt in range(max_retries):
+        response = await client.get(url, params=params)
+
+        if response.status_code == 200:
+            return response
+
+        if response.status_code == 404:
+            raise GitHubNotFoundError(
+                f"Resource not found: {url}"
+            )
+
+        if response.status_code == 403:
+            # Check if it's a rate limit or a permission error
+            response_data = response.json()
+            is_rate_limit = (
+                "rate limit" in response_data.get("message", "").lower()
+                or response.headers.get("x-ratelimit-remaining") == "0"
+            )
+
+            if is_rate_limit and attempt < max_retries - 1:
+                wait_seconds = 2 ** (attempt + 1)  # 2, 4, 8 seconds
+                logger.warning(
+                    f"GitHub rate limit hit — waiting {wait_seconds}s "
+                    f"before retry {attempt + 1} of {max_retries - 1}"
+                )
+                await asyncio.sleep(wait_seconds)
+                continue
+
+            raise GitHubRateLimitError(
+                f"GitHub rate limit exceeded after {attempt + 1} attempts"
+            )
+
+        raise GitHubClientError(
+            f"GitHub API error {response.status_code}: {response.text}"
+        )
+
+    raise GitHubRateLimitError(
+        f"GitHub rate limit exceeded after {max_retries} attempts"
+    )    
