@@ -7,7 +7,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from database import engine
+from middleware.auth import APIKeyMiddleware
 from routers import incidents, reports
+from routers import management
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register middleware — runs on every request before route handlers
+app.add_middleware(APIKeyMiddleware)
+
 app.include_router(incidents.router)
 app.include_router(reports.router)
+app.include_router(management.router)
 
 
 @app.get("/health")
