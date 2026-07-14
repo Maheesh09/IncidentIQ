@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 
+from database import AsyncSession
+from pipeline.calibration import fetch_calibration_context
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
@@ -27,6 +29,7 @@ async def _synthesize_findings(
     incident_type: str | None,
     description: str,
     errors: list[str],
+    callibration_context: str = "",
 ) -> list[dict]:
     """Use Gemini to synthesize findings into ranked hypotheses.
 
@@ -87,6 +90,8 @@ Factor this into your confidence scores.
 """
 
     prompt = f"""You are a senior SRE performing root cause analysis for a production incident.
+
+{calibration_context}
 
 Incident description: {description}
 Severity: {severity or "unknown"}
@@ -174,6 +179,7 @@ async def synthesize_node(state: IncidentState) -> dict:
 
     Runs after both Log Analysis and Deploy Correlation finish (fan-in).
     Combines structured findings from both agents into causal hypotheses.
+    Injects past SRE feedback as calibration context.
 
     Args:
         state: Current incident state from LangGraph.
@@ -189,11 +195,18 @@ async def synthesize_node(state: IncidentState) -> dict:
         deploy_findings = state.get("deploy_findings")
         errors = state.get("errors", [])
 
-        # Warn if both sources are missing — synthesis will be low quality
         if not log_findings and not deploy_findings:
             logger.warning(
-                f"No findings available for synthesis on incident {incident_id} "
-                f"— both log and deploy agents produced no data"
+                f"No findings available for synthesis on incident {incident_id}"
+            )
+
+        # Fetch calibration context from past feedback
+        calibration_context = ""
+        async with AsyncSessionLocal() as db:
+            calibration_context = await fetch_calibration_context(
+                db=db,
+                incident_type=state.get("incident_type"),
+                severity=state.get("severity"),
             )
 
         hypotheses = await _synthesize_findings(
@@ -203,6 +216,7 @@ async def synthesize_node(state: IncidentState) -> dict:
             incident_type=state.get("incident_type"),
             description=state["description"],
             errors=errors,
+            calibration_context=calibration_context,
         )
 
         logger.info(
