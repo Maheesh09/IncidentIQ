@@ -42,6 +42,12 @@ class Incident(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         String(50), nullable=False, server_default=func.now()
     )
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=True,
+        index=True,
+    )
 
 class Organisation(Base):
     """ORM model for the organisations table.
@@ -150,7 +156,7 @@ class WebhookConfig(Base):
     last_delivery_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )
-    
+
 class AgentRun(Base):
     """ORM model for the agent_runs table.
 
@@ -173,6 +179,12 @@ class AgentRun(Base):
     started_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     completed_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=True,
+        index=True,
+    )
     
 class RCAReport(Base):
     """ORM model for the rca_reports table.
@@ -197,6 +209,12 @@ class RCAReport(Base):
     generated_at: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default=func.now()
     )    
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=True,
+        index=True,
+    )
 
 class Feedback(Base):
     """ORM model for the feedback table.
@@ -220,3 +238,9 @@ class Feedback(Base):
     submitted_at: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default=func.now()
     )    
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=True,
+        index=True,
+    )
