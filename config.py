@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # GitHub
     github_pat: str
 
+    # Add this to the Settings class
+    gcp_project_id: str | None = None
+
     # Pipeline behaviour
     default_lookback_minutes: int = 30
     max_log_size_bytes: int = 10 * 1024 * 1024  # 10MB
