@@ -1,0 +1,39 @@
+# docker-compose.yml
+# Local development environment
+# Runs the app and PostgreSQL together in one command
+
+services:
+  db:
+    image: postgres:16
+    container_name: incidentiq-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: incidentiq
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: incidentiq-app
+    ports:
+      - "8000:8080"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/incidentiq
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GITHUB_PAT: ${GITHUB_PAT}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+
+volumes:
+  postgres_data:

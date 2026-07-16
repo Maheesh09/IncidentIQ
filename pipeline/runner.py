@@ -8,11 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import AsyncSessionLocal
-from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport
 from pipeline.graph import build_graph
 from pipeline.state import IncidentState
 from tools.connectors import get_connector
 from utils.secret_manager import retrieve_secret
+from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport, WebhookConfig
+from utils.webhook import deliver_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +176,15 @@ async def run_pipeline(
                 )
 
             await db.commit()
+
+            # Deliver webhook after committing the report
+            if final_report:
+                await _deliver_webhook_for_org(
+                    organisation_id=organisation_id,
+                    incident_id=incident_id,
+                    final_report=final_report,
+                )
+
             logger.info(
                 f"Pipeline completed successfully for incident {incident_id}"
             )
@@ -353,3 +363,66 @@ async def _fetch_logs_for_incident(
         )
         return raw_logs
     
+async def _deliver_webhook_for_org(
+    organisation_id: str | None,
+    incident_id: str,
+    final_report: dict,
+) -> None:
+    """Deliver RCA report webhook for the organisation if configured.
+
+    Fetches the organisation's webhook config and delivers the report.
+    Updates last_delivered_at and last_delivery_status in the database.
+
+    Args:
+        organisation_id: The organisation's UUID string, or None.
+        incident_id: The incident ID for the report.
+        final_report: The complete RCA report dict.
+    """
+    if not organisation_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WebhookConfig).where(
+                WebhookConfig.organisation_id
+                == __import__("uuid").UUID(organisation_id),
+                WebhookConfig.is_active == 1,
+            )
+        )
+        webhook_config = result.scalar_one_or_none()
+
+        if not webhook_config:
+            logger.info(
+                f"No webhook configured for org {organisation_id}"
+            )
+            return
+
+        logger.info(
+            f"Delivering webhook for incident {incident_id} "
+            f"to {webhook_config.url}"
+        )
+
+        success = await deliver_webhook(
+            url=webhook_config.url,
+            secret=webhook_config.secret,
+            incident_id=incident_id,
+            report=final_report,
+        )
+
+        # Update delivery status in database
+        webhook_config.last_delivered_at = (
+            datetime.now(timezone.utc).isoformat()
+        )
+        webhook_config.last_delivery_status = (
+            "success" if success else "failed"
+        )
+        await db.commit()
+
+        if success:
+            logger.info(
+                f"Webhook delivered for incident {incident_id}"
+            )
+        else:
+            logger.error(
+                f"Webhook delivery failed for incident {incident_id}"
+            )    
