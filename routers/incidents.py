@@ -120,6 +120,7 @@ async def upload_logs(
         raw_logs=raw_logs,
         github_repo_url=incident.github_repo_url,
         reported_at=incident.reported_at,
+        organisation_id=str(incident.organisation_id) if incident.organisation_id else None,
     )
 
     logger.info(

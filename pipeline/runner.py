@@ -8,9 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import AsyncSessionLocal
-from models.incident import AgentRun, Incident, RCAReport
+from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport
 from pipeline.graph import build_graph
 from pipeline.state import IncidentState
+from tools.connectors import get_connector
+from utils.secret_manager import retrieve_secret
 
 logger = logging.getLogger(__name__)
 
@@ -24,29 +26,37 @@ async def run_pipeline(
     raw_logs: str,
     github_repo_url: str,
     reported_at: str,
+    organisation_id: str | None = None,
 ) -> None:
     """Execute the full LangGraph pipeline for an incident.
 
     Runs as a FastAPI background task — not in the request/response cycle.
-    Tracks each agent's execution in the agent_runs table.
+    Fetches logs via connector if organisation has one configured.
     Updates the incident status in the database when complete.
 
     Args:
         incident_id: The incident ID to analyse.
         description: Plain English incident description.
-        raw_logs: Raw log file content as a string.
+        raw_logs: Manually uploaded log content (used as fallback).
         github_repo_url: GitHub repository URL.
         reported_at: ISO format string of when the incident was reported.
+        organisation_id: Organisation UUID string, or None for legacy runs.
     """
     logger.info(f"Pipeline starting for incident {incident_id}")
 
+    # Fetch logs via connector if available
+    logs_to_analyse = await _fetch_logs_for_incident(
+        organisation_id=organisation_id,
+        raw_logs=raw_logs,
+        reported_at=reported_at,
+    )
+
     async with AsyncSessionLocal() as db:
         try:
-            # Build the initial state
             initial_state: IncidentState = {
                 "incident_id": incident_id,
                 "description": description,
-                "raw_logs": raw_logs,
+                "raw_logs": logs_to_analyse,
                 "github_repo_url": github_repo_url,
                 "reported_at": reported_at,
                 "severity": None,
@@ -242,4 +252,104 @@ async def _record_agent_finish(
 
     await db.flush()                
 
+async def _fetch_logs_for_incident(
+    organisation_id: str | None,
+    raw_logs: str,
+    reported_at: str,
+) -> str:
+    """Fetch logs using the organisation's configured log source connector.
+
+    If the organisation has a log source configured, fetches logs
+    automatically. Falls back to manual upload logs if not configured
+    or if fetching fails.
+
+    Args:
+        organisation_id: The organisation's UUID string, or None.
+        raw_logs: Manually uploaded log content as fallback.
+        reported_at: ISO format incident reported time for window calc.
+
+    Returns:
+        Log content as a plain string ready for the pipeline.
+    """
+    if not organisation_id:
+        logger.info("No organisation_id — using manual logs")
+        return raw_logs
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(LogSourceConfig).where(
+                LogSourceConfig.organisation_id
+                == __import__("uuid").UUID(organisation_id),
+                LogSourceConfig.is_active == 1,
+            )
+        )
+        log_source = result.scalar_one_or_none()
+
+    if not log_source or log_source.source_type == "manual":
+        logger.info(
+            f"Org {organisation_id} using manual log upload"
+        )
+        return raw_logs
+
+    # Fetch credentials from Secret Manager
+    try:
+        credentials = await retrieve_secret(log_source.secret_name)
+    except RuntimeError as e:
+        logger.error(
+            f"Failed to retrieve credentials for org {organisation_id}: {e}"
+            f" — falling back to manual logs"
+        )
+        return raw_logs
+
+    # Calculate a basic window for log fetching
+    try:
+        from datetime import timedelta
+        reported = datetime.fromisoformat(
+            reported_at.replace("Z", "+00:00")
+        )
+        window_start = (reported - timedelta(minutes=30)).isoformat()
+        window_end = reported.isoformat()
+    except ValueError:
+        window_start = reported_at
+        window_end = reported_at
+
+    # Build the connector and fetch logs
+    try:
+        connector = await get_connector(
+            source_type=log_source.source_type,
+            credentials=credentials,
+        )
+
+        service_name = (
+            log_source.config_metadata.get("service_name", "unknown")
+            if log_source.config_metadata
+            else "unknown"
+        )
+
+        fetched_logs = await connector.fetch_logs(
+            service_name=service_name,
+            window_start=window_start,
+            window_end=window_end,
+        )
+
+        if fetched_logs:
+            logger.info(
+                f"Fetched {len(fetched_logs)} chars of logs "
+                f"via {log_source.source_type} connector "
+                f"for org {organisation_id}"
+            )
+            return fetched_logs
+
+        logger.warning(
+            f"Connector returned empty logs for org {organisation_id} "
+            f"— falling back to manual logs"
+        )
+        return raw_logs
+
+    except Exception as e:
+        logger.error(
+            f"Connector failed for org {organisation_id}: {e} "
+            f"— falling back to manual logs"
+        )
+        return raw_logs
     
