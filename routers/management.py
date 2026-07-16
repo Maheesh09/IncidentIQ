@@ -233,3 +233,47 @@ async def configure_webhook(
         webhook_url=webhook_url,
         message="Webhook configured successfully",
     )
+
+@router.get(
+    "/organisations/me",
+    response_model=OrganisationDetailsResponse,
+    status_code=200,
+)
+async def get_organisation_details(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> OrganisationDetailsResponse:
+    """Get current organisation details and configuration status."""
+    organisation_id = request.state.organisation_id
+
+    result = await db.execute(
+        select(Organisation).where(
+            Organisation.id == uuid.UUID(organisation_id)
+        )
+    )
+    organisation = result.scalar_one_or_none()
+
+    if organisation is None:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    log_source_result = await db.execute(
+        select(LogSourceConfig).where(
+            LogSourceConfig.organisation_id == uuid.UUID(organisation_id)
+        )
+    )
+    log_source = log_source_result.scalar_one_or_none()
+
+    webhook_result = await db.execute(
+        select(WebhookConfig).where(
+            WebhookConfig.organisation_id == uuid.UUID(organisation_id)
+        )
+    )
+    webhook = webhook_result.scalar_one_or_none()
+
+    return OrganisationDetailsResponse(
+        organisation_id=organisation_id,
+        name=organisation.name,
+        log_source_type=log_source.source_type if log_source else None,
+        webhook_configured=webhook is not None and webhook.is_active == 1,
+        created_at=organisation.created_at,
+    )    

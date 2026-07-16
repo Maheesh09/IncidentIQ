@@ -20,12 +20,11 @@ PUBLIC_ROUTES = {
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/management/organisations",
 }
 
 # Route prefixes that don't require authentication
-PUBLIC_PREFIXES = (
-    "/management/organisations",
-)
+PUBLIC_PREFIXES = ()
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
