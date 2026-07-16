@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 engine = create_async_engine(
     settings.database_url,
     echo=False,
-    pool_size=10,
+    pool_size=5,
     max_overflow=20,
+    connect_args={"ssl": "require"} if "neon.tech" in settings.database_url else {},
 )
 
 AsyncSessionLocal = async_sessionmaker(
