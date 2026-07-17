@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from models.incident import AgentRun, Feedback, Incident, RCAReport
+from models.incident import AgentRun, Feedback, Incident, LogSourceConfig, RCAReport
 from models.schemas import (
     FeedbackRequest,
     FeedbackResponse,
@@ -31,11 +31,13 @@ router = APIRouter(prefix="/incidents", tags=["incidents"])
 @router.post("/", response_model=IncidentResponse, status_code=202)
 async def create_incident(
     request: IncidentRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> IncidentResponse:
     """Create a new incident and queue it for RCA analysis.
 
     Returns 202 Accepted immediately — analysis runs in the background.
+    If org has a non-manual log source, pipeline starts immediately.
     The caller uses GET /incidents/{id} to poll for progress.
     """
     # Generate a human-readable incident ID
@@ -55,12 +57,48 @@ async def create_incident(
     db.add(incident)
     await db.flush()
 
-    logger.info(f"Incident {incident_id} created — queued for analysis")
+    # Auto-trigger pipeline if org has a non-manual log source configured
+    auto_triggered = False
+    if incident.organisation_id:
+        log_source_result = await db.execute(
+            select(LogSourceConfig).where(
+                LogSourceConfig.organisation_id == incident.organisation_id,
+                LogSourceConfig.is_active == 1,
+            )
+        )
+        log_source = log_source_result.scalar_one_or_none()
+
+        if log_source and log_source.source_type != "manual":
+            incident.status = "processing"
+            incident.started_at = datetime.now(timezone.utc).isoformat()
+            await db.flush()
+
+            background_tasks.add_task(
+                run_pipeline,
+                incident_id=incident_id,
+                description=request.description,
+                raw_logs="",
+                github_repo_url=str(request.github_repo_url),
+                reported_at=request.reported_at.isoformat(),
+                organisation_id=str(incident.organisation_id),
+            )
+            auto_triggered = True
+
+    logger.info(
+        f"Incident {incident_id} created — "
+        f"{'pipeline auto-triggered via connector' if auto_triggered else 'awaiting log upload'}"
+    )
+
+    message = (
+        "Incident created. Analysis started automatically via your configured log source."
+        if auto_triggered
+        else "Incident created. Upload logs via POST /incidents/{id}/logs to start analysis."
+    )
 
     return IncidentResponse(
         incident_id=incident_id,
-        status="pending",
-        message="Incident created. Upload logs via POST /incidents/{id}/logs to start analysis.",
+        status="processing" if auto_triggered else "pending",
+        message=message,
     )
 
 @router.post("/{incident_id}/logs", response_model=LogUploadResponse, status_code=200)
