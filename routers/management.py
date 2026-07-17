@@ -141,10 +141,13 @@ async def configure_log_source(
     from utils.secret_manager import store_secret
     secret_name = f"org-{organisation_id}-log-source"
 
-    await store_secret(
-        secret_name=secret_name,
-        secret_value=body.credentials,
-    )
+    if body.source_type != "manual":
+        await store_secret(
+            secret_name=secret_name,
+            secret_value=body.credentials,
+        )
+    else:
+        secret_name = "manual-no-credentials"
 
     # Save or update log source config in database
     result = await db.execute(
