@@ -5,7 +5,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pipeline.runner import run_pipeline
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,7 @@ router = APIRouter(prefix="/incidents", tags=["incidents"])
 async def create_incident(
     request: IncidentRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,                    # raw ASGI request — gives us state from middleware
     db: AsyncSession = Depends(get_db),
 ) -> IncidentResponse:
     """Create a new incident and queue it for RCA analysis.
@@ -40,12 +41,15 @@ async def create_incident(
     If org has a non-manual log source, pipeline starts immediately.
     The caller uses GET /incidents/{id} to poll for progress.
     """
+    # Pull organisation_id stamped by APIKeyMiddleware
+    organisation_id_str: str | None = getattr(http_request.state, "organisation_id", None)
+
     # Generate a human-readable incident ID
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
     unique_suffix = str(uuid.uuid4())[:8].upper()
     incident_id = f"INC-{date_str}-{unique_suffix}"
 
-    # Create the incident record in the database
+    # Create the incident record — now with organisation_id stamped correctly
     incident = Incident(
         id=incident_id,
         description=request.description,
@@ -53,16 +57,17 @@ async def create_incident(
         reported_at=request.reported_at.isoformat(),
         status="pending",
         created_at=datetime.now(timezone.utc).isoformat(),
+        organisation_id=uuid.UUID(organisation_id_str) if organisation_id_str else None,
     )
     db.add(incident)
     await db.flush()
 
     # Auto-trigger pipeline if org has a non-manual log source configured
     auto_triggered = False
-    if incident.organisation_id:
+    if organisation_id_str:
         log_source_result = await db.execute(
             select(LogSourceConfig).where(
-                LogSourceConfig.organisation_id == incident.organisation_id,
+                LogSourceConfig.organisation_id == uuid.UUID(organisation_id_str),
                 LogSourceConfig.is_active == 1,
             )
         )
@@ -80,7 +85,7 @@ async def create_incident(
                 raw_logs="",
                 github_repo_url=str(request.github_repo_url),
                 reported_at=request.reported_at.isoformat(),
-                organisation_id=str(incident.organisation_id),
+                organisation_id=organisation_id_str,
             )
             auto_triggered = True
 
