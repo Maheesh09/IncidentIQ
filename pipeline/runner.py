@@ -1,6 +1,6 @@
 # pipeline/runner.py
 from __future__ import annotations
-
+import uuid
 import logging
 from datetime import datetime, timezone
 
@@ -288,8 +288,7 @@ async def _fetch_logs_for_incident(
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(LogSourceConfig).where(
-                LogSourceConfig.organisation_id
-                == __import__("uuid").UUID(organisation_id),
+                LogSourceConfig.organisation_id == uuid.UUID(organisation_id),
                 LogSourceConfig.is_active == 1,
             )
         )
@@ -384,8 +383,7 @@ async def _deliver_webhook_for_org(
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(WebhookConfig).where(
-                WebhookConfig.organisation_id
-                == __import__("uuid").UUID(organisation_id),
+                WebhookConfig.organisation_id == uuid.UUID(organisation_id),
                 WebhookConfig.is_active == 1,
             )
         )
