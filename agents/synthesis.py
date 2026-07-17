@@ -29,7 +29,7 @@ async def _synthesize_findings(
     incident_type: str | None,
     description: str,
     errors: list[str],
-    callibration_context: str = "",
+    calibration_context: str = "",
 ) -> list[dict]:
     """Use Gemini to synthesize findings into ranked hypotheses.
 
