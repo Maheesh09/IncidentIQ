@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from database import AsyncSession
+from database import AsyncSessionLocal
 from pipeline.calibration import fetch_calibration_context
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
