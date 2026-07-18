@@ -75,7 +75,7 @@ sequenceDiagram
 
     C->>API: POST /incidents
     API-->>C: 202 Accepted (incident_id)
-    Note over API,P: Response returns immediately;<br/>analysis runs in the background
+    Note over API,P: Response returns immediately -<br/>analysis runs in the background
     P->>L: Fetch logs for window
     L-->>P: Log entries
     P->>G: Reason over extracted signals
