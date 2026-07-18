@@ -82,7 +82,7 @@ class GCPLoggingConnector(BaseLogConnector):
             custom_filter = self._config_metadata.get("log_filter")
 
             if custom_filter:
-                log_filter = f"{custom_filter} {window_clause}"
+                log_filter = f"({custom_filter}) {window_clause}"
                 logger.info(
                     f"Using customer-configured GCP log filter for "
                     f"service '{service_name}'"

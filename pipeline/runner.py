@@ -344,6 +344,7 @@ async def _fetch_logs_for_incident(
         connector = await get_connector(
             source_type=log_source.source_type,
             credentials=credentials,
+            config_metadata=log_source.config_metadata,
         )
 
         service_name = (

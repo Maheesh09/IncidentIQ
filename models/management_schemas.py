@@ -102,7 +102,7 @@ class OrganisationDetailsResponse(BaseModel):
 
     organisation_id: str
     name: str
-    admin_email: EmailStr | None
+    admin_email: EmailStr | None = None
     log_source_type: str | None
     webhook_configured: bool
     created_at: str
