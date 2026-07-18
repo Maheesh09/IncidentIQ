@@ -78,6 +78,13 @@ async def create_incident(
             incident.started_at = datetime.now(timezone.utc).isoformat()
             await db.flush()
 
+            # ORDERING INVARIANT: run_pipeline opens its own session and
+            # reads this incident by ID. That read only succeeds because
+            # FastAPI (>=0.106) runs the get_db dependency's commit BEFORE
+            # background tasks execute. Do not move the commit, and do not
+            # replace BackgroundTasks with an out-of-process queue without
+            # reading the note in run_pipeline's docstring first.
+            
             background_tasks.add_task(
                 run_pipeline,
                 incident_id=incident_id,
