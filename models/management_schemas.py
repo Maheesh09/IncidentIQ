@@ -1,7 +1,7 @@
 # models/management_schemas.py
 from __future__ import annotations
 
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, HttpUrl, Field, EmailStr
 
 
 
@@ -16,7 +16,7 @@ class OrganisationRequest(BaseModel):
         description="Organisation display name",
         examples=["Acme Corp SRE Team"]
     )
-    admin_email: str = Field(
+    admin_email: EmailStr = Field(
         ...,
         description="Admin contact email for the organisation",
         examples=["sre-admin@acme.com"]

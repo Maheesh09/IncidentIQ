@@ -29,3 +29,5 @@ google-auth==2.35.0
 
 # AWS
 boto3==1.35.36
+
+email-validator==2.3.0
