@@ -97,7 +97,8 @@ class IncidentStatusResponse(BaseModel):
     agents_completed: list[str]
     agents_pending: list[str]
     started_at: str | None
-    elapsed_seconds: int | None    
+    elapsed_seconds: int | None
+    error_message: str | None = None
 
 
 # GET /incidents/{id}/report

@@ -47,6 +47,7 @@ class Incident(Base):
         nullable=True,
         index=True,
     )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class Organisation(Base):
     """ORM model for the organisations table.

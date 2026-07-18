@@ -227,6 +227,7 @@ async def get_incident_status(
         agents_pending=pending,
         started_at=incident.started_at,
         elapsed_seconds=elapsed_seconds,
+        error_message=incident.error_message,
     )
 
 @router.get("/{incident_id}/report", response_model=RCAReportResponse, status_code=200)

@@ -52,6 +52,23 @@ async def run_pipeline(
         reported_at=reported_at,
     )
 
+    # Refuse to analyse nothing. Without log content the agents still
+    # produce a fluent report — inferred entirely from the description —
+    # which is indistinguishable from a real analysis. Delivering that to
+    # a customer during an outage is worse than delivering an error.
+    if not logs_to_analyse or not logs_to_analyse.strip():
+        reason = (
+            "No logs available for analysis. The configured log source "
+            "returned no entries for the investigation window, and no logs "
+            "were uploaded manually. Check that the service name and log "
+            "filter in your log source configuration match your environment, "
+            "and that the incident timestamp is correct."
+        )
+        logger.error(f"Incident {incident_id} aborted — {reason}")
+        await _mark_incident_failed(incident_id, reason)
+        return
+
+
     async with AsyncSessionLocal() as db:
         try:
             initial_state: IncidentState = {
@@ -424,3 +441,30 @@ async def _deliver_webhook_for_org(
             logger.error(
                 f"Webhook delivery failed for incident {incident_id}"
             )    
+
+async def _mark_incident_failed(incident_id: str, reason: str) -> None:
+    """Mark an incident as failed with a customer-visible reason.
+
+    Used when the pipeline cannot run at all — for example when no logs
+    could be obtained. Writes the reason to the incident so the customer
+    sees it via GET /incidents/{id} rather than only in server logs.
+
+    Args:
+        incident_id: The incident to mark failed.
+        reason: Plain English explanation shown to the customer.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Incident).where(Incident.id == incident_id)
+            )
+            incident = result.scalar_one_or_none()
+            if incident:
+                incident.status = "failed"
+                incident.error_message = reason
+                incident.completed_at = datetime.now(timezone.utc).isoformat()
+                await db.commit()
+    except Exception as e:
+        logger.error(
+            f"Could not mark incident {incident_id} as failed: {e}"
+        )            
