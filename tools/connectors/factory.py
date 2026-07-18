@@ -12,6 +12,7 @@ from tools.connectors.datadog_logs import DatadogLogsConnector
 logger = logging.getLogger(__name__)
 
 # Maps source_type strings to connector classes
+
 CONNECTOR_REGISTRY: dict[str, type[BaseLogConnector]] = {
     "gcp": GCPLoggingConnector,
     "aws": AWSCloudWatchConnector,
@@ -24,6 +25,7 @@ async def get_connector(
     source_type: str,
     credentials: dict | None = None,
     raw_logs: str | None = None,
+    config_metadata: dict | None = None
 ) -> BaseLogConnector:
     """Build and return the appropriate log connector.
 
@@ -36,6 +38,7 @@ async def get_connector(
                     Required for gcp, aws, datadog.
         raw_logs: Pre-loaded log content for manual uploads.
                  Required for manual.
+        config_metadata: Optional configuration metadata for the connector.
 
     Returns:
         An initialised connector ready to call fetch_logs on.
@@ -62,7 +65,7 @@ async def get_connector(
                 f"credentials are required for {source_type} connector"
             )
         connector_class = CONNECTOR_REGISTRY[source_type]
-        connector = connector_class(credentials=credentials)
+        connector = connector_class(credentials=credentials, config_metadata=config_metadata)
 
     # Validate credentials before returning
     is_valid = await connector.validate_credentials()
