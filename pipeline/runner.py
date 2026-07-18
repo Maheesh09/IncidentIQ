@@ -42,6 +42,12 @@ async def run_pipeline(
         github_repo_url: GitHub repository URL.
         reported_at: ISO format string of when the incident was reported.
         organisation_id: Organisation UUID string, or None for legacy runs.
+
+        Requires the incident row to be committed before this runs. Under
+        FastAPI BackgroundTasks this is guaranteed — the get_db dependency
+        commits before background tasks execute. An out-of-process queue
+        (Cloud Tasks) provides no such guarantee; see the transactional
+        outbox note below before migrating.
     """
     logger.info(f"Pipeline starting for incident {incident_id}")
 

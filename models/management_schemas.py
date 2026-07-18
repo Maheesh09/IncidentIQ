@@ -1,7 +1,8 @@
 # models/management_schemas.py
 from __future__ import annotations
+import re
 
-from pydantic import BaseModel, HttpUrl, Field, EmailStr
+from pydantic import BaseModel, HttpUrl, Field, EmailStr, field_validator
 
 
 
@@ -58,6 +59,42 @@ class LogSourceRequest(BaseModel):
         description="Non-sensitive configuration like project IDs and log filters",
         examples=[{"project_id": "my-gcp-project", "log_filter": "severity>=ERROR"}]
     )
+    @field_validator("config_metadata")
+    @classmethod
+    def validate_service_name(cls, value: dict | None) -> dict | None:
+        """Reject service names containing query-syntax metacharacters.
+
+        service_name is interpolated directly into GCP and Datadog filter
+        expressions. Restricting it to a conservative character set closes
+        the injection path at the point of configuration rather than in
+        each connector.
+
+        Args:
+            value: The config_metadata dict, or None.
+
+        Returns:
+            The validated dict unchanged.
+
+        Raises:
+            ValueError: If service_name contains disallowed characters.
+        """
+        if not value:
+            return value
+
+        service_name = value.get("service_name")
+        if service_name is None:
+            return value
+
+        if not isinstance(service_name, str):
+            raise ValueError("service_name must be a string")
+
+        if not re.fullmatch(r"[A-Za-z0-9._\-/]{1,128}", service_name):
+            raise ValueError(
+                "service_name may only contain letters, digits, and the "
+                "characters . _ - / (max 128 chars)"
+            )
+
+        return value
 
 
 class LogSourceResponse(BaseModel):
