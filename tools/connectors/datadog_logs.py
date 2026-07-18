@@ -66,7 +66,7 @@ class DatadogLogsConnector(BaseLogConnector):
                 "filter": {
                     "query": (
                         f"service:{service_name} "
-                        f"status:error OR status:critical"
+                        f"(status:error OR status:critical)"
                     ),
                     "from": window_start,
                     "to": window_end,
