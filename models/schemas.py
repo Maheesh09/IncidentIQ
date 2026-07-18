@@ -1,9 +1,11 @@
 # models/schemas.py
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, HttpUrl, Field, field_validator
+
+MAX_CLOCK_SKEW_MINUTES = 5
 
 class IncidentRequest(BaseModel):
     """Request body for creating a new incident."""
@@ -24,6 +26,41 @@ class IncidentRequest(BaseModel):
         description="Timestamp when the incident was first reported (ISO 8601)",
         examples=["2026-07-03T14:35:00Z"]
     )
+    @field_validator("reported_at")
+    @classmethod
+    def reject_future_timestamps(cls, value: datetime) -> datetime:
+        """Reject incidents reported in the future.
+
+        A future reported_at produces an investigation window containing
+        no logs, which yields a confident but entirely evidence-free RCA.
+        Failing here costs nothing; failing later costs an LLM call and
+        delivers a fabricated report to the customer.
+
+        Args:
+            value: The parsed reported_at datetime.
+
+        Returns:
+            The validated datetime, normalised to timezone-aware UTC.
+
+        Raises:
+            ValueError: If reported_at is more than the allowed skew ahead.
+        """
+        # A caller may send a timestamp with no offset. Treat it as UTC
+        # rather than raising — comparing naive to aware raises TypeError.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+
+        limit = datetime.now(timezone.utc) + timedelta(
+            minutes=MAX_CLOCK_SKEW_MINUTES
+        )
+
+        if value > limit:
+            raise ValueError(
+                f"reported_at is in the future ({value.isoformat()}). "
+                f"An incident cannot be reported before it occurs."
+            )
+
+        return value
 
 
 class IncidentResponse(BaseModel):
