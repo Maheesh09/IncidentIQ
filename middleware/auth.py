@@ -12,6 +12,9 @@ from database import AsyncSessionLocal
 from models.incident import APIKey, Organisation
 from utils.auth import hash_api_key
 
+from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = logging.getLogger(__name__)
 
 # Routes that don't require authentication
@@ -26,6 +29,46 @@ PUBLIC_ROUTES = {
 # Route prefixes that don't require authentication
 PUBLIC_PREFIXES = ()
 
+# Only refresh last_used_at if the recorded value is older than this.
+# Prevents a database write on every single authenticated request while
+# still keeping the audit timestamp accurate to within a few minutes.
+LAST_USED_REFRESH_SECONDS = 300
+
+async def _touch_last_used(db: AsyncSession, api_key: APIKey) -> None:
+    """Refresh an API key's last_used_at timestamp, throttled.
+
+    Writes only if the existing timestamp is missing or older than
+    LAST_USED_REFRESH_SECONDS. Failures are swallowed — an audit
+    timestamp is never worth failing an authenticated request over.
+
+    Args:
+        db: Active database session from the middleware.
+        api_key: The authenticated APIKey ORM object.
+    """
+    now = datetime.now(timezone.utc)
+
+    if api_key.last_used_at is not None:
+        try:
+            previous = datetime.fromisoformat(api_key.last_used_at)
+            # Tolerate rows written before timestamps were timezone-aware
+            if previous.tzinfo is None:
+                previous = previous.replace(tzinfo=timezone.utc)
+            if (now - previous).total_seconds() < LAST_USED_REFRESH_SECONDS:
+                return
+        except ValueError:
+            # Unparseable timestamp — overwrite it with a good one
+            logger.warning(
+                f"Unparseable last_used_at on key {api_key.key_prefix}, overwriting"
+            )
+
+    try:
+        api_key.last_used_at = now.isoformat()
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.warning(
+            f"Failed to update last_used_at for key {api_key.key_prefix}: {e}"
+        )
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Middleware that validates API keys on every protected request.
@@ -85,6 +128,11 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 )
             )
             row = result.first()
+
+            # Refresh the audit timestamp while we still have a session open.
+            # Reusing this session avoids opening a second connection.
+            if row is not None:
+                await _touch_last_used(db, row[0])
 
         if row is None:
             return JSONResponse(

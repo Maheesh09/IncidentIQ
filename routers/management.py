@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from utils.secret_manager import store_secret
+
 from database import get_db
 from models.incident import APIKey, LogSourceConfig, Organisation, WebhookConfig
 from models.management_schemas import (
@@ -55,6 +57,7 @@ async def register_organisation(
     # Create the organisation
     organisation = Organisation(
         name=request.name,
+        admin_email=request.admin_email,
         is_active=1,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -83,6 +86,7 @@ async def register_organisation(
     return OrganisationResponse(
         organisation_id=str(organisation.id),
         name=organisation.name,
+        admin_email=organisation.admin_email,
         api_key=raw_key,
         key_prefix=key_prefix,
         message=(
@@ -138,18 +142,14 @@ async def configure_log_source(
             )
 
     # Store credentials in Secret Manager
-    from utils.secret_manager import store_secret
-    secret_name = f"org-{organisation_id}-log-source"
-
-    if body.source_type != "manual":
-        await store_secret(
-            secret_name=secret_name,
-            secret_value=body.credentials,
-        )
-    else:
+    # Compute the secret name up front — deterministic, derived from org ID.
+    # We need it for the DB row before we actually write the secret.
+    if body.source_type == "manual":
         secret_name = "manual-no-credentials"
+    else:
+        secret_name = f"org-{organisation_id}-log-source"
 
-    # Save or update log source config in database
+    # Step 1: DB write FIRST (reversible)
     result = await db.execute(
         select(LogSourceConfig).where(
             LogSourceConfig.organisation_id == uuid.UUID(organisation_id)
@@ -172,6 +172,19 @@ async def configure_log_source(
             created_at=datetime.now(timezone.utc).isoformat(),
         )
         db.add(log_source)
+
+    # Force the SQL to the database now. This is the critical line —
+    # flush() emits the INSERT/UPDATE and raises on constraint violations
+    # immediately, instead of deferring them to commit time after we've
+    # already written the secret.
+    await db.flush()
+
+    # Step 2: Secret Manager write LAST (irreversible)
+    if body.source_type != "manual":
+        await store_secret(
+            secret_name=secret_name,
+            secret_value=body.credentials,
+        )
 
     logger.info(
         f"Log source configured for org {organisation_id}: "
