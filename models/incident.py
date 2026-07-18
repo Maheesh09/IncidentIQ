@@ -8,7 +8,6 @@ from sqlalchemy import ARRAY, Integer, String, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from pydantic import EmailStr
 from database import Base
 
 
@@ -48,6 +47,7 @@ class Incident(Base):
         nullable=True,
         index=True,
     )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class Organisation(Base):
     """ORM model for the organisations table.
@@ -62,7 +62,7 @@ class Organisation(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    admin_email: Mapped[EmailStr | None] = mapped_column(
+    admin_email: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(

@@ -17,15 +17,17 @@ class GCPLoggingConnector(BaseLogConnector):
     and passed in at construction time.
     """
 
-    def __init__(self, credentials: dict) -> None:
+    def __init__(self, credentials: dict, config_metadata: dict | None = None) -> None:
         """Initialise the GCP connector with service account credentials.
 
         Args:
             credentials: Dict containing project_id and
                         service_account_key (JSON string or dict).
+            config_metadata: Optional configuration metadata.
         """
         self._project_id = credentials.get("project_id")
         self._service_account_key = credentials.get("service_account_key")
+        self._config_metadata = config_metadata or {}
 
     async def fetch_logs(
         self,
@@ -68,12 +70,30 @@ class GCPLoggingConnector(BaseLogConnector):
             )
 
             # Build the log filter
-            log_filter = (
-                f'resource.labels.service_name="{service_name}" '
+            # The time window is non-negotiable — it is the investigation
+            # window the Triage agent computed, and the entire causal
+            # analysis depends on logs falling inside it. Customers may
+            # customise WHICH logs are selected, never WHEN.
+            window_clause = (
                 f'timestamp>="{window_start}" '
-                f'timestamp<="{window_end}" '
-                f'severity>=ERROR'
+                f'timestamp<="{window_end}"'
             )
+
+            custom_filter = self._config_metadata.get("log_filter")
+
+            if custom_filter:
+                log_filter = f"({custom_filter}) {window_clause}"
+                logger.info(
+                    f"Using customer-configured GCP log filter for "
+                    f"service '{service_name}'"
+                )
+                
+            else:
+                log_filter = (
+                    f'resource.labels.service_name="{service_name}" '
+                    f"{window_clause} "
+                    f"severity>=ERROR"
+                )
 
             logger.info(
                 f"Fetching GCP logs for service '{service_name}' "

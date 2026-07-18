@@ -22,15 +22,17 @@ class DatadogLogsConnector(BaseLogConnector):
     and passed in at construction time.
     """
 
-    def __init__(self, credentials: dict) -> None:
+    def __init__(self, credentials: dict, config_metadata: dict | None = None) -> None:
         """Initialise the Datadog connector with API credentials.
 
         Args:
             credentials: Dict containing api_key and app_key.
+            config_metadata: Optional configuration metadata.
         """
         self._api_key = credentials.get("api_key")
         self._app_key = credentials.get("app_key")
         self._site = credentials.get("site", "datadoghq.com")
+        self._config_metadata = config_metadata or {}
 
     async def fetch_logs(
         self,

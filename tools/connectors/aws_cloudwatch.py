@@ -17,17 +17,19 @@ class AWSCloudWatchConnector(BaseLogConnector):
     and passed in at construction time.
     """
 
-    def __init__(self, credentials: dict) -> None:
+    def __init__(self, credentials: dict, config_metadata: dict | None = None) -> None:
         """Initialise the AWS connector with IAM credentials.
 
         Args:
             credentials: Dict containing access_key_id,
                         secret_access_key, and region.
+            config_metadata: Optional configuration metadata.
         """
         self._access_key_id = credentials.get("access_key_id")
         self._secret_access_key = credentials.get("secret_access_key")
         self._region = credentials.get("region", "us-east-1")
         self._log_group = credentials.get("log_group")
+        self._config_metadata = config_metadata or {}
 
     async def fetch_logs(
         self,
