@@ -57,6 +57,7 @@ async def register_organisation(
     # Create the organisation
     organisation = Organisation(
         name=request.name,
+        admin_email=request.admin_email,
         is_active=1,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -85,6 +86,7 @@ async def register_organisation(
     return OrganisationResponse(
         organisation_id=str(organisation.id),
         name=organisation.name,
+        admin_email=organisation.admin_email,
         api_key=raw_key,
         key_prefix=key_prefix,
         message=(

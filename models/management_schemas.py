@@ -31,6 +31,7 @@ class OrganisationResponse(BaseModel):
 
     organisation_id: str
     name: str
+    admin_email: EmailStr
     api_key: str
     key_prefix: str
     message: str
