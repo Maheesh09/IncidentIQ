@@ -136,13 +136,19 @@ class WebhookResponse(BaseModel):
 
 # GET /management/organisations/me
 class OrganisationDetailsResponse(BaseModel):
-    """Response for getting current organisation details."""
+    """Current organisation details and configuration status."""
 
     organisation_id: str
     name: str
-    admin_email: EmailStr | None = None
+    admin_email: str | None
     log_source_type: str | None
     webhook_configured: bool
+    slack_configured: bool = False
+    slack_last_notified_at: str | None = None
+    slack_last_status: str | None = None
+    pagerduty_configured: bool = False
+    pagerduty_last_notified_at: str | None = None
+    pagerduty_last_status: str | None = None
     created_at: str
 
 

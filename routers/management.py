@@ -12,10 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from utils.secret_manager import store_secret
 
 from database import get_db
-from models.incident import APIKey, LogSourceConfig, Organisation, WebhookConfig
+from models.incident import APIKey, LogSourceConfig, Organisation, WebhookConfig, NotificationConfig
 from models.management_schemas import (
     LogSourceRequest,
     LogSourceResponse,
+    NotificationRequest,
+    NotificationResponse,
+    NotificationStatusResponse,
     OrganisationDetailsResponse,
     OrganisationRequest,
     OrganisationResponse,
@@ -250,6 +253,87 @@ async def configure_webhook(
         message="Webhook configured successfully",
     )
 
+@router.post(
+    "/notifications",
+    response_model=NotificationResponse,
+    status_code=200,
+)
+async def configure_notification(
+    request: Request,
+    body: NotificationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> NotificationResponse:
+    """Configure a Slack or PagerDuty notification channel.
+
+    An organisation can have both channels configured simultaneously.
+    Credentials are stored in Secret Manager — only the reference
+    name is written to the database.
+
+    Follows the same DB-first ordering as configure_log_source:
+    flush the row before writing to Secret Manager so a DB failure
+    never leaves an orphaned secret.
+    """
+    organisation_id = request.state.organisation_id
+
+    # secret_name is deterministic — derived from org and channel type.
+    # Computing it before any write keeps the DB and Secret Manager in sync.
+    secret_name = f"org-{organisation_id}-notify-{body.notification_type}"
+
+    # Step 1: DB write FIRST (reversible on failure)
+    result = await db.execute(
+        select(NotificationConfig).where(
+            NotificationConfig.organisation_id == uuid.UUID(organisation_id),
+            NotificationConfig.notification_type == body.notification_type,
+        )
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.secret_name = secret_name
+        existing.config_metadata = body.config_metadata
+        existing.is_active = 1
+        existing.updated_at = datetime.now(timezone.utc).isoformat()
+    else:
+        notification_config = NotificationConfig(
+            organisation_id=uuid.UUID(organisation_id),
+            notification_type=body.notification_type,
+            secret_name=secret_name,
+            config_metadata=body.config_metadata,
+            is_active=1,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        db.add(notification_config)
+
+    # flush() emits the SQL now — constraint violations surface before
+    # the irreversible Secret Manager write below.
+    await db.flush()
+
+    # Step 2: Secret Manager write LAST (irreversible)
+    await store_secret(
+        secret_name=secret_name,
+        secret_value=body.credentials,
+    )
+
+    logger.info(
+        f"Notification channel '{body.notification_type}' configured "
+        f"for org {organisation_id}"
+    )
+
+    channel_label = (
+        "Slack workspace" if body.notification_type == "slack"
+        else "PagerDuty service"
+    )
+
+    return NotificationResponse(
+        organisation_id=organisation_id,
+        notification_type=body.notification_type,
+        secret_name=secret_name,
+        message=(
+            f"{channel_label} notifications configured successfully. "
+            f"RCA reports will be delivered when analysis completes."
+        ),
+    )
+
 @router.get(
     "/organisations/me",
     response_model=OrganisationDetailsResponse,
@@ -259,7 +343,7 @@ async def get_organisation_details(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> OrganisationDetailsResponse:
-    """Get current organisation details and configuration status."""
+    """Get current organisation details and all configuration status."""
     organisation_id = request.state.organisation_id
 
     result = await db.execute(
@@ -268,7 +352,6 @@ async def get_organisation_details(
         )
     )
     organisation = result.scalar_one_or_none()
-
     if organisation is None:
         raise HTTPException(status_code=404, detail="Organisation not found")
 
@@ -286,10 +369,32 @@ async def get_organisation_details(
     )
     webhook = webhook_result.scalar_one_or_none()
 
+    # Fetch both notification channels in one query — returns 0, 1, or 2 rows
+    notif_result = await db.execute(
+        select(NotificationConfig).where(
+            NotificationConfig.organisation_id == uuid.UUID(organisation_id),
+            NotificationConfig.is_active == 1,
+        )
+    )
+    notifications = {n.notification_type: n for n in notif_result.scalars()}
+    slack = notifications.get("slack")
+    pagerduty = notifications.get("pagerduty")
+
     return OrganisationDetailsResponse(
         organisation_id=organisation_id,
         name=organisation.name,
+        admin_email=organisation.admin_email,       # was missing before
         log_source_type=log_source.source_type if log_source else None,
         webhook_configured=webhook is not None and webhook.is_active == 1,
+        slack_configured=slack is not None,
+        slack_last_notified_at=slack.last_notified_at if slack else None,
+        slack_last_status=slack.last_notification_status if slack else None,
+        pagerduty_configured=pagerduty is not None,
+        pagerduty_last_notified_at=(
+            pagerduty.last_notified_at if pagerduty else None
+        ),
+        pagerduty_last_status=(
+            pagerduty.last_notification_status if pagerduty else None
+        ),
         created_at=organisation.created_at,
     )    
