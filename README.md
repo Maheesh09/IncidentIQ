@@ -3,7 +3,7 @@
 **AI-powered root cause analysis for production incidents.**
 
 When a service breaks, someone has to read the logs, check what shipped recently, and work out
-which change caused it — under pressure, at 3am. IncidentIQ does that correlation automatically
+which change caused it - under pressure, at 3am. IncidentIQ does that correlation automatically
 and returns ranked root cause hypotheses with supporting evidence, typically in under two minutes.
 
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
@@ -35,7 +35,7 @@ with an explanation rather than returning a confident guess.
 ## How it works
 
 Five specialist agents run as a directed graph. Triage sets the investigation window, then log
-analysis and deploy correlation run **in parallel** — they read independent sources, so running
+analysis and deploy correlation run **in parallel** -they read independent sources, so running
 them sequentially would double the wait.
 
 ```mermaid
@@ -59,7 +59,7 @@ graph TD
 
 **A key design rule:** deterministic tools run before the LLM. Raw logs are parsed with regex to
 extract timestamps, error levels, and frequency stats first. Only those extracted signals reach
-Gemini — never 50,000 raw log lines. This keeps analysis fast, cheap, and inside context limits.
+Gemini -never 50,000 raw log lines. This keeps analysis fast, cheap, and inside context limits.
 
 ---
 
@@ -75,7 +75,7 @@ sequenceDiagram
 
     C->>API: POST /incidents
     API-->>C: 202 Accepted (incident_id)
-    Note over API,P: Response returns immediately —<br/>analysis runs in the background
+    Note over API,P: Response returns immediately -<br/>analysis runs in the background
     P->>L: Fetch logs for window
     L-->>P: Log entries
     P->>G: Reason over extracted signals
@@ -99,7 +99,7 @@ curl -X POST https://incidentiq-384221529062.us-central1.run.app/management/orga
 
 The API key is returned **once** and never stored in readable form. Save it.
 
-**2. Connect a log source** *(optional — you can upload logs manually instead)*
+**2. Connect a log source** *(optional -you can upload logs manually instead)*
 
 ```bash
 curl -X POST https://incidentiq-384221529062.us-central1.run.app/management/log-source \
@@ -216,7 +216,7 @@ graph LR
 
 **Multi-tenancy** is enforced at the middleware layer. Every request resolves to an organisation
 before reaching a route handler, and all queries are scoped to that organisation. Customer
-credentials are stored in Google Cloud Secret Manager — never in the database.
+credentials are stored in Google Cloud Secret Manager -never in the database.
 
 ---
 
@@ -262,9 +262,9 @@ Open http://localhost:8000/docs for interactive API documentation.
 | `DATABASE_URL` | ✅ | `postgresql+asyncpg://user:pass@host/incidentiq` |
 | `GEMINI_API_KEY` | ✅ | Google AI Studio API key |
 | `GITHUB_PAT` | ✅ | Personal access token with `repo` scope |
-| `GCP_PROJECT_ID` | — | Required only for Secret Manager |
-| `DEFAULT_LOOKBACK_MINUTES` | — | Investigation window size (default `30`) |
-| `MAX_LOG_SIZE_BYTES` | — | Upload limit (default `10485760`) |
+| `GCP_PROJECT_ID` | -| Required only for Secret Manager |
+| `DEFAULT_LOOKBACK_MINUTES` | -| Investigation window size (default `30`) |
+| `MAX_LOG_SIZE_BYTES` | -| Upload limit (default `10485760`) |
 
 ### Docker
 
@@ -331,7 +331,7 @@ without re-running the analysis.
 | Transient agent failures | Automatic retry before the incident is marked failed |
 | GitHub rate limits | Exponential backoff |
 | Partial agent failure | Errors flow into graph state; synthesis proceeds with partial data |
-| No logs available | Incident fails with an explanation — never a fabricated report |
+| No logs available | Incident fails with an explanation -never a fabricated report |
 | Malformed logs | Falls back to passing the raw chunk to the LLM |
 | Invalid input | Rejected at the schema boundary before any work is queued |
 
@@ -339,10 +339,10 @@ without re-running the analysis.
 
 ## Roadmap
 
-- [x] **Phase 1** — Core pipeline: five agents, five endpoints, four tables
-- [x] **Phase 2** — Retry logic, rate limit backoff, confidence calibration, input validation
-- [x] **Phase 3** — Multi-tenancy, API key auth, log connectors, webhooks, Cloud Run, CI/CD
-- [ ] **Phase 4** — Slack and PagerDuty integration, historical dashboard, GitLab support
+- [x] **Phase 1** -Core pipeline: five agents, five endpoints, four tables
+- [x] **Phase 2** -Retry logic, rate limit backoff, confidence calibration, input validation
+- [x] **Phase 3** -Multi-tenancy, API key auth, log connectors, webhooks, Cloud Run, CI/CD
+- [ ] **Phase 4** -Slack and PagerDuty integration, historical dashboard, GitLab support
 
 ---
 
