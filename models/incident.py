@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import ARRAY, Integer, String, Text, ForeignKey
+from sqlalchemy import ARRAY, Integer, String, Text, ForeignKey, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -247,3 +247,52 @@ class Feedback(Base):
         nullable=True,
         index=True,
     )
+
+class NotificationConfig(Base):
+    """ORM model for the notification_configs table.
+
+    One row per channel per organisation. Supports Slack and PagerDuty.
+    Credentials (webhook URL, routing key) are stored in Secret Manager;
+    this row holds only the reference name and non-sensitive config.
+
+    A single organisation can have both a Slack and a PagerDuty config
+    simultaneously — the unique constraint is on (organisation_id, notification_type).
+    """
+
+    __tablename__ = "notification_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organisations.id"),
+        nullable=False,
+        index=True,
+    )
+    notification_type: Mapped[str] = mapped_column(
+        String(20), nullable=False         # "slack" | "pagerduty"
+    )
+    secret_name: Mapped[str] = mapped_column(
+        String(255), nullable=False        # GCP Secret Manager reference
+    )
+    config_metadata: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True               # e.g. {"channel": "#incidents"}
+    )
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_notified_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_notification_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organisation_id",
+            "notification_type",
+            name="uq_notification_org_type",
+        ),
+    )    
