@@ -2,6 +2,7 @@
 from __future__ import annotations
 import uuid
 import logging
+import asyncio
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -12,8 +13,10 @@ from pipeline.graph import build_graph
 from pipeline.state import IncidentState
 from tools.connectors import get_connector
 from utils.secret_manager import retrieve_secret
-from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport, WebhookConfig
+from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport, WebhookConfig, NotificationConfig
 from utils.webhook import deliver_webhook
+from utils.pagerduty import _map_severity, _build_payload
+from utils.slack import send_slack_notificationS
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +206,11 @@ async def run_pipeline(
             # Deliver webhook after committing the report
             if final_report:
                 await _deliver_webhook_for_org(
+                    organisation_id=organisation_id,
+                    incident_id=incident_id,
+                    final_report=final_report,
+                )
+                await _deliver_notifications_for_org(
                     organisation_id=organisation_id,
                     incident_id=incident_id,
                     final_report=final_report,
@@ -475,3 +483,95 @@ async def _mark_incident_failed(incident_id: str, reason: str) -> None:
         logger.error(
             f"Could not mark incident {incident_id} as failed: {e}"
         )            
+
+async def _deliver_notifications_for_org(
+    organisation_id: str | None,
+    incident_id: str,
+    final_report: dict,
+) -> None:
+    """Deliver Slack and PagerDuty notifications for the organisation.
+
+    Queries all active notification configs, fires deliveries concurrently,
+    then stamps each row with last_notified_at and last_notification_status.
+    Never raises — notification failure must not affect the incident record.
+
+    Args:
+        organisation_id: The organisation's UUID string, or None.
+        incident_id: The incident ID for the notification header.
+        final_report: The complete RCA report dict from the Report Agent.
+    """
+    if not organisation_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(NotificationConfig).where(
+                NotificationConfig.organisation_id == uuid.UUID(organisation_id),
+                NotificationConfig.is_active == 1,
+            )
+        )
+        configs = {n.notification_type: n for n in result.scalars()}
+
+        if not configs:
+            logger.info(
+                f"No notification channels configured for org {organisation_id}"
+            )
+            return
+
+        # Build coroutines for each configured channel
+        tasks: list[tuple[str, object]] = []
+
+        if "slack" in configs:
+            slack = configs["slack"]
+            tasks.append((
+                "slack",
+                send_slack_notification(
+                    secret_name=slack.secret_name,
+                    incident_id=incident_id,
+                    report=final_report,
+                    config_metadata=slack.config_metadata,
+                ),
+            ))
+
+        if "pagerduty" in configs:
+            pd = configs["pagerduty"]
+            tasks.append((
+                "pagerduty",
+                send_pagerduty_notification(
+                    secret_name=pd.secret_name,
+                    incident_id=incident_id,
+                    report=final_report,
+                    config_metadata=pd.config_metadata,
+                ),
+            ))
+
+        if not tasks:
+            return
+
+        # Fire both concurrently — they're independent external calls.
+        # return_exceptions=True means a Slack failure doesn't cancel PagerDuty.
+        channel_names = [name for name, _ in tasks]
+        coros = [coro for _, coro in tasks]
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        # Stamp each config row with delivery outcome
+        now = datetime.now(timezone.utc).isoformat()
+        for channel, outcome in zip(channel_names, results):
+            config = configs[channel]
+            config.last_notified_at = now
+
+            if isinstance(outcome, Exception):
+                logger.error(
+                    f"{channel} notification raised for incident "
+                    f"{incident_id}: {outcome}"
+                )
+                config.last_notification_status = "failed"
+            elif outcome is True:
+                config.last_notification_status = "success"
+                logger.info(
+                    f"{channel} notification delivered for {incident_id}"
+                )
+            else:
+                config.last_notification_status = "failed"
+
+        await db.commit()        
