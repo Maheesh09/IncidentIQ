@@ -19,6 +19,15 @@ engine = create_async_engine(
     echo=False,
     pool_size=5,
     max_overflow=20,
+    # Neon is a serverless PostgreSQL — it closes idle connections after
+    # a few minutes of inactivity. pool_pre_ping sends a lightweight
+    # SELECT 1 before handing out a pooled connection; if Neon has closed
+    # it, SQLAlchemy opens a fresh connection instead of raising
+    # InterfaceError: connection is closed.
+    pool_pre_ping=True,
+    # Proactively recycle connections after 5 minutes so we never hand
+    # out a connection that Neon has already closed on its end.
+    pool_recycle=300,
     connect_args={"ssl": "require"} if "neon.tech" in settings.database_url else {},
 )
 
