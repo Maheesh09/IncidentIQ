@@ -16,7 +16,7 @@ from utils.secret_manager import retrieve_secret
 from models.incident import AgentRun, Incident, LogSourceConfig, RCAReport, WebhookConfig, NotificationConfig
 from utils.webhook import deliver_webhook
 from utils.pagerduty import _map_severity, _build_payload
-from utils.slack import send_slack_notificationS
+from utils.slack import send_slack_notification
 
 logger = logging.getLogger(__name__)
 
