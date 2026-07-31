@@ -4,9 +4,13 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+from config import settings
+
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from fastapi import FastAPI
+
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine
 from middleware.auth import APIKeyMiddleware
@@ -37,7 +41,13 @@ app = FastAPI(
 )
 Instrumentator().instrument(app).expose(app)
 # Register middleware — runs on every request before route handlers
-app.add_middleware(APIKeyMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET","POST"],
+    allow_headers=["Authorization","Content-Type"],
+)
 
 app.include_router(incidents.router)
 app.include_router(reports.router)

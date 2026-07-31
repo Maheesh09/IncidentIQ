@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # API key pepper for hashing
     api_key_pepper: str
 
+    cors_allowed_origins: list[str] = ["*"]  # Allow all origins for now
+
     # Pipeline behaviour
     default_lookback_minutes: int = 30
     max_log_size_bytes: int = 10 * 1024 * 1024  # 10MB
