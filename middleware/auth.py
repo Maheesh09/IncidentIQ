@@ -24,6 +24,7 @@ PUBLIC_ROUTES = {
     "/openapi.json",
     "/redoc",
     "/management/organisations",
+    "/metrics",
 }
 
 # Route prefixes that don't require authentication
