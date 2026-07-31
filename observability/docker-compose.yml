@@ -1,7 +1,7 @@
 services:
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     container_name: incidentiq-prometheus
 
     ports:
@@ -10,8 +10,11 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     container_name: incidentiq-grafana
 
     ports:
@@ -19,6 +22,7 @@ services:
 
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
 
     depends_on:
       - prometheus
