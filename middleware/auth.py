@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import AsyncSessionLocal
 from models.incident import APIKey, Organisation
-from utils.auth import hash_api_key
+from utils.auth import hash_api_key, hash_api_key_legacy_sha256
 
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -116,14 +116,15 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             )
 
         # Validate key against database
-        key_hash = hash_api_key(raw_key)
+        hmac_hash = hash_api_key(raw_key)
+        legacy_hash = hash_api_key_legacy_sha256(raw_key)
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(APIKey, Organisation)
                 .join(Organisation, APIKey.organisation_id == Organisation.id)
                 .where(
-                    APIKey.key_hash == key_hash,
+                    APIKey.key_hash.in_([hmac_hash, legacy_hash]),
                     APIKey.is_active == 1,
                     Organisation.is_active == 1,
                 )
@@ -133,7 +134,16 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             # Refresh the audit timestamp while we still have a session open.
             # Reusing this session avoids opening a second connection.
             if row is not None:
-                await _touch_last_used(db, row[0])
+                api_key_obj = row[0]
+
+                if api_key_obj.hash_version == 1:
+                    api_key_obj.key_hash = hmac_hash
+                    api_key_obj.hash_version = 2
+                    logger.info(
+                        f"Upgraded API key {api_key_obj.key_prefix} to HMAC-SHA-256"
+                    )
+
+                await _touch_last_used(db, api_key_obj)    
 
         if row is None:
             return JSONResponse(

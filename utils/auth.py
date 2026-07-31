@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import secrets
 import string
+import hmac
+from config import settings
 
 
 # API key format: iqk_live_<40 random chars>
@@ -35,6 +37,21 @@ def generate_api_key() -> tuple[str, str, str]:
 
 def hash_api_key(raw_key: str) -> str:
     """Compute SHA-256 hash of a raw API key.
+
+    Args:
+        raw_key: The full API key string.
+
+    Returns:
+        Hex-encoded SHA-256 hash string.
+    """
+    return hmac.new(
+        settings.api_key_pepper.encode("utf-8"),
+        raw_key.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+def hash_api_key_legacy_sha256(raw_key: str) -> str:
+    """Compute SHA-256 hash of a raw API key using legacy method.
 
     Args:
         raw_key: The full API key string.

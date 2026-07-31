@@ -93,6 +93,7 @@ class APIKey(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     key_prefix: Mapped[str] = mapped_column(String(12), nullable=False)
+    hash_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")  # 1=legacy SHA-256, 2=HMAC-SHA-256 with pepper
     is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default=func.now()
