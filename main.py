@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from fastapi import FastAPI
 
 from database import engine
@@ -33,7 +35,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
+Instrumentator().instrument(app).expose(app)
 # Register middleware — runs on every request before route handlers
 app.add_middleware(APIKeyMiddleware)
 
