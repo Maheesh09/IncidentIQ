@@ -75,6 +75,7 @@ async def register_organisation(
         name="Default key",
         key_hash=key_hash,
         key_prefix=key_prefix,
+        hash_version=2,  # New keys are HMAC-SHA-256 with pepper
         is_active=1,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
