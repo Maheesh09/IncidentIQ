@@ -142,8 +142,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     logger.info(
                         f"Upgraded API key {api_key_obj.key_prefix} to HMAC-SHA-256"
                     )
+                    await db.commit()
 
-                await _touch_last_used(db, api_key_obj)    
+                await _touch_last_used(db, api_key_obj)
 
         if row is None:
             return JSONResponse(
