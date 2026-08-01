@@ -62,11 +62,11 @@ Instrumentator().instrument(app).expose(app)
 # Register middleware — runs on every request before route handlers
 # CORS must be registered first, then authentication
 app.add_middleware(
-    CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=False,
     allow_methods=["GET","POST"],
     allow_headers=["Authorization","Content-Type"],
+    CORSMiddleware,
 )
 app.add_middleware(APIKeyMiddleware)
 
