@@ -1,34 +1,16 @@
 # Web framework
-fastapi==0.115.0
+fastapi==0.115.6                          # was 0.115.0 — unlocks starlette 0.40 SSRF fix
 uvicorn[standard]==0.30.6
 prometheus-fastapi-instrumentator==7.0.0
-
-# Settings management
-pydantic-settings==2.4.0
-
-# Database
-sqlalchemy[asyncio]==2.0.35
-asyncpg==0.29.0
-alembic==1.13.3
+starlette==0.40.0                         # ADD — pins the SSRF/DoS fix explicitly
 
 # LangGraph + LangChain + Gemini
 langgraph==0.2.28
-langchain==0.3.1
+langchain==0.3.27                         # was 0.3.1 — required for patched core + langsmith
+langchain-core==0.3.85                    # ADD — fixes CRITICAL RCE CVE-2025-68664
+langchain-text-splitters==0.3.9           # ADD — fixes XXE CVE-2025-6985
+langsmith==0.3.45                         # ADD — fixes file-read + deserialization CVEs
 langchain-google-genai==2.0.1
 
-# GitHub API
-httpx==0.27.2
-
 # Utilities
-python-multipart==0.0.12
-python-dotenv==1.0.1
-
-# Google Cloud
-google-cloud-logging==3.11.3
-google-cloud-secret-manager==2.20.2
-google-auth==2.35.0
-
-# AWS
-boto3==1.35.36
-
-email-validator==2.3.0
+python-multipart==0.0.18                  # was 0.0.12 — fixes path-traversal + DoS
