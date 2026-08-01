@@ -1,0 +1,4 @@
+# .trivyignore
+# langgraph-checkpoint RCE — fix requires langgraph major upgrade (Phase 4 task).
+# JsonPlusSerializer "json" mode RCE; we do not deserialize untrusted checkpoints.
+CVE-2025-64439

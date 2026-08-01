@@ -131,7 +131,7 @@ Confidence guidelines:
         }
 
     except Exception as e:
-        logger.error(f"Deploy correlation LLM reasoning failed: {e}")
+        logging.exception(f"Deploy correlation LLM reasoning failed: {e}")
         return {
             "most_likely_commit_sha": None,
             "correlation_confidence": 0.0,
@@ -176,7 +176,7 @@ async def correlate_deploys_node(state: IncidentState) -> dict:
                 window_end=investigation_window["end"],
             )
         except GitHubNotFoundError:
-            logger.error(
+            logging.exception(
                 f"Repository not found for incident {incident_id}: "
                 f"{state['github_repo_url']}"
             )
@@ -188,7 +188,7 @@ async def correlate_deploys_node(state: IncidentState) -> dict:
                 ],
             }
         except GitHubRateLimitError:
-            logger.warning(
+            logging.warning(
                 f"GitHub rate limit hit for incident {incident_id}"
             )
             return {
@@ -198,7 +198,7 @@ async def correlate_deploys_node(state: IncidentState) -> dict:
                 ],
             }
         except GitHubClientError as e:
-            logger.error(
+            logging.exception(
                 f"GitHub client error for incident {incident_id}: {e}"
             )
             return {
@@ -208,7 +208,7 @@ async def correlate_deploys_node(state: IncidentState) -> dict:
                 ],
             }
 
-        logger.info(
+        logging.info(
             f"Fetched {len(commits)} commits for incident {incident_id}"
         )
 
@@ -257,7 +257,7 @@ async def correlate_deploys_node(state: IncidentState) -> dict:
         return {"deploy_findings": deploy_findings}
 
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Deploy correlation agent failed for incident {incident_id}: {e}"
         )
         return {

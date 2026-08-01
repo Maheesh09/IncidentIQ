@@ -149,7 +149,7 @@ Incident type guidelines:
         }
 
     except Exception as e:
-        logger.error(f"LLM classification failed: {e}")
+        logging.exception(f"LLM classification failed: {e}")
         return {
             "severity": "unknown",
             "incident_type": "unknown",
@@ -169,7 +169,7 @@ async def triage_node(state: IncidentState) -> dict:
         Partial state update with triage findings.
     """
     incident_id = state["incident_id"]
-    logger.info(f"Triage agent starting for incident {incident_id}")
+    logging.info(f"Triage agent starting for incident {incident_id}")
 
     try:
         # Step 1 — deterministic: calculate investigation window
@@ -183,7 +183,7 @@ async def triage_node(state: IncidentState) -> dict:
             raw_logs=state["raw_logs"],
         )
 
-        logger.info(
+        logging.info(
             f"Triage complete for {incident_id} — "
             f"severity: {classification['severity']}, "
             f"type: {classification['incident_type']}"
@@ -197,7 +197,7 @@ async def triage_node(state: IncidentState) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"Triage agent failed for incident {incident_id}: {e}")
+        logging.exception(f"Triage agent failed for incident {incident_id}: {e}")
         return {
             "severity": "unknown",
             "incident_type": "unknown",

@@ -165,7 +165,7 @@ Guidelines:
         return validated
 
     except Exception as e:
-        logger.error(f"Synthesis LLM reasoning failed: {e}")
+        logging.exception(f"Synthesis LLM reasoning failed: {e}")
         return [{
             "rank": 1,
             "confidence": 0.0,
@@ -228,7 +228,7 @@ async def synthesize_node(state: IncidentState) -> dict:
         return {"hypotheses": hypotheses}
 
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Synthesis agent failed for incident {incident_id}: {e}"
         )
         return {
