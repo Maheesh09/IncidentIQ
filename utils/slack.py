@@ -170,8 +170,8 @@ async def send_slack_notification(
         secret_name: Secret Manager reference for the Slack webhook URL.
         incident_id: The incident identifier for the message header.
         report: raw_report dict from the Report Agent.
-        config_metadata: Optional config — currently unused, reserved for
-                         future channel override support.
+        config_metadata: Optional config. If it contains a "channel" key,
+                         the notification is routed to that channel.
 
     Returns:
         True if delivered successfully, False on any failure.
@@ -194,7 +194,11 @@ async def send_slack_notification(
             return False
 
         blocks = _build_blocks(incident_id, report)
-        payload = {"blocks": blocks}
+        payload: dict = {"blocks": blocks}
+
+        channel = (config_metadata or {}).get("channel")
+        if channel:
+            payload["channel"] = channel
 
         async with httpx.AsyncClient(timeout=SLACK_TIMEOUT_SECONDS) as client:
             response = await client.post(webhook_url, json=payload)
