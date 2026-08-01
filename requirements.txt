@@ -16,7 +16,7 @@ alembic==1.13.3
 langgraph==0.2.28
 langchain==0.3.30
 langchain-core==0.3.85
-langchain-text-splitters==0.3.9
+langchain-text-splitters==1.1.2
 langsmith==0.8.18
 langchain-google-genai==2.0.1
 
