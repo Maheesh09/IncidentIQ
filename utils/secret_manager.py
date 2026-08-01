@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-from google.api_core import exceptions as gcp_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,7 @@ async def store_secret(secret_name: str, secret_value: dict) -> str:
     """
     try:
         from google.cloud import secretmanager
+        from google.api_core import exceptions as gcp_exceptions
 
         client = secretmanager.SecretManagerServiceClient()
         project_id = _get_project_id()
