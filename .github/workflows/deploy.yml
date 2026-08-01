@@ -38,7 +38,6 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t ${{ env.IMAGE }}:${{ github.sha }} .
-          docker tag ${{ env.IMAGE }}:${{ github.sha }} ${{ env.IMAGE }}:latest
 
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
@@ -52,7 +51,6 @@ jobs:
       - name: Push Docker image
         run: |
           docker push ${{ env.IMAGE }}:${{ github.sha }}
-          docker push ${{ env.IMAGE }}:latest
 
       - name: Deploy to Cloud Run
         run: |
