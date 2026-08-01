@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # CORS configuration - must be set explicitly in production
     # Example: CORS_ALLOWED_ORIGINS=["https://app.example.com","https://dashboard.example.com"]
-    cors_allowed_origins: list[str] = []
+    cors_allowed_origins: list[str] = ["http://localhost:3000"]
 
     # Pipeline behaviour
     default_lookback_minutes: int = 30
