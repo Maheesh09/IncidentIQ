@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # API key pepper for hashing
     api_key_pepper: str
 
-    cors_allowed_origins: list[str] = ["*"]  # Allow all origins for now
+    # CORS configuration - must be set explicitly in production
+    # Example: CORS_ALLOWED_ORIGINS=["https://app.example.com","https://dashboard.example.com"]
+    cors_allowed_origins: list[str] = []
 
     # Pipeline behaviour
     default_lookback_minutes: int = 30

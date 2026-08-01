@@ -28,6 +28,25 @@ async def lifespan(app: FastAPI):
     Shutdown: all connections in the pool are closed cleanly.
     """
     logger.info("IncidentIQ starting up")
+
+    # Validate CORS configuration at startup
+    if not settings.cors_allowed_origins:
+        logger.error(
+            "CORS_ALLOWED_ORIGINS is not configured. "
+            "Set explicit trusted origins in your .env file. "
+            "Never use ['*'] in production."
+        )
+        raise ValueError(
+            "CORS_ALLOWED_ORIGINS must be explicitly configured. "
+            "Add CORS_ALLOWED_ORIGINS=[\"https://your-domain.com\"] to .env"
+        )
+
+    if "*" in settings.cors_allowed_origins:
+        logger.warning(
+            "CORS is configured with wildcard '*' — this allows any website to call your API. "
+            "Replace with explicit trusted origins before deploying to production."
+        )
+
     yield
     await engine.dispose()
     logger.info("IncidentIQ shutting down — database connections released")
@@ -41,6 +60,7 @@ app = FastAPI(
 )
 Instrumentator().instrument(app).expose(app)
 # Register middleware — runs on every request before route handlers
+# CORS must be registered first, then authentication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
@@ -48,6 +68,7 @@ app.add_middleware(
     allow_methods=["GET","POST"],
     allow_headers=["Authorization","Content-Type"],
 )
+app.add_middleware(APIKeyMiddleware)
 
 app.include_router(incidents.router)
 app.include_router(reports.router)
