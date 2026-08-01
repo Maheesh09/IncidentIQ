@@ -60,16 +60,16 @@ app = FastAPI(
 )
 Instrumentator().instrument(app).expose(app)
 # Register middleware — runs on every request before route handlers
-# CORS must be registered first, then authentication
+# Authentication must be registered first, then CORS
+app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
+    CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=False,
     allow_methods=["GET","POST"],
     allow_headers=["Authorization","Content-Type"],
-    CORSMiddleware,
+    
 )
-app.add_middleware(APIKeyMiddleware)
-
 app.include_router(incidents.router)
 app.include_router(reports.router)
 app.include_router(management.router)
