@@ -157,6 +157,7 @@ async def send_slack_notification(
     secret_name: str,
     incident_id: str,
     report: dict,
+    config_metadata: dict | None = None,
 
 ) -> bool:
     """Send an RCA report summary to a configured Slack channel.
