@@ -10,3 +10,11 @@ CVE-2026-54283
 
 # wheel PrivEsc — build-time dependency only, never present in the runtime image.
 CVE-2026-24049
+
+# langchain-core path traversal in legacy load_prompt (file-based prompt loading).
+# We build prompts in code and never call load_prompt on untrusted paths.
+# Fix requires langchain-core 1.x major upgrade — tracked separately.
+CVE-2026-34070
+
+# jaraco.context — build-time only, vendored in setuptools, never imported at runtime.
+CVE-2026-23949
