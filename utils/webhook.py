@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 from datetime import datetime, timezone
+from utils.url_security import is_safe_outbound_url_async
 
 import httpx
 
@@ -56,6 +57,14 @@ async def deliver_webhook(
     Returns:
         True if delivery succeeded, False if all attempts failed.
     """
+    is_safe, reason = await is_safe_outbound_url_async(url)
+    if not is_safe:
+        logger.error(
+            f"Webhook delivery aborted for incident {incident_id} — "
+            f"unsafe URL: {reason}"
+        )
+        return False
+    
     payload = json.dumps({
         "event": "rca.completed",
         "incident_id": incident_id,

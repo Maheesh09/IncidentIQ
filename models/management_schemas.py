@@ -123,6 +123,46 @@ class WebhookRequest(BaseModel):
         description="Signing secret for HMAC-SHA256 webhook verification",
         examples=["your-webhook-signing-secret"]
     )
+    @field_validator("url")
+    @classmethod
+    def validate_url_not_internal(cls, value: HttpUrl) -> HttpUrl:
+        """Reject webhook URLs that are obviously internal at config time.
+
+        This is a fast, synchronous pre-check — https scheme and literal
+        private/loopback/link-local IPs. Full DNS-based SSRF validation
+        runs again at delivery time in deliver_webhook.
+
+        Args:
+            value: The parsed webhook URL.
+
+        Returns:
+            The URL unchanged if it passes.
+
+        Raises:
+            ValueError: If the URL uses a non-https scheme or a literal
+                internal IP address.
+        """
+        import ipaddress
+
+        url_str = str(value)
+        if not url_str.startswith("https://"):
+            raise ValueError("Webhook URL must use https")
+
+        host = value.host
+        if host:
+            try:
+                ip = ipaddress.ip_address(host)
+                if (ip.is_private or ip.is_loopback or
+                        ip.is_link_local or ip.is_reserved):
+                    raise ValueError(
+                        "Webhook URL must not point to an internal IP address"
+                    )
+            except ValueError as e:
+                # Re-raise our own message; a plain hostname lands here too
+                # (not a literal IP) and is fine — it's checked at delivery.
+                if "internal IP" in str(e):
+                    raise
+        return value
 
 
 class WebhookResponse(BaseModel):

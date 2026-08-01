@@ -29,6 +29,8 @@ from utils.auth import generate_api_key
 
 logger = logging.getLogger(__name__)
 
+MANUAL_SOURCE_SENTINEL = "manual-no-credentials" # nosec B105
+
 router = APIRouter(prefix="/management", tags=["management"])
 
 
@@ -149,7 +151,7 @@ async def configure_log_source(
     # Compute the secret name up front — deterministic, derived from org ID.
     # We need it for the DB row before we actually write the secret.
     if body.source_type == "manual":
-        secret_name = "manual-no-credentials"
+        secret_name = MANUAL_SOURCE_SENTINEL
     else:
         secret_name = f"org-{organisation_id}-log-source"
 

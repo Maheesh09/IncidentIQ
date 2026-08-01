@@ -22,6 +22,7 @@ async def store_secret(secret_name: str, secret_value: dict) -> str:
     """
     try:
         from google.cloud import secretmanager
+        from google.api_core import exceptions as gcp_exceptions
 
         client = secretmanager.SecretManagerServiceClient()
         project_id = _get_project_id()
@@ -38,9 +39,9 @@ async def store_secret(secret_name: str, secret_value: dict) -> str:
                     },
                 }
             )
-        except Exception:
-            # Secret already exists — that's fine, we'll add a new version
-            pass
+        except gcp_exceptions.AlreadyExists:
+            
+            logger.debug(f"Secret {secret_name} already exists — adding new version")
 
         # Store the secret value as a new version
         payload = json.dumps(secret_value).encode("utf-8")
