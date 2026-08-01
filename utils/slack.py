@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import httpx
 
 from utils.secret_manager import retrieve_secret
+from utils.url_security import is_safe_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ async def send_slack_notification(
     secret_name: str,
     incident_id: str,
     report: dict,
-    config_metadata: dict | None = None,
+
 ) -> bool:
     """Send an RCA report summary to a configured Slack channel.
 
@@ -174,6 +175,14 @@ async def send_slack_notification(
     Returns:
         True if delivered successfully, False on any failure.
     """
+    is_safe, reason = is_safe_outbound_url(webhook_url)
+    if not is_safe:
+        logger.error(
+            f"Slack notification aborted for incident {incident_id} — "
+            f"unsafe URL {webhook_url}: {reason}"
+        )
+        return False
+
     try:
         credentials = await retrieve_secret(secret_name)
         webhook_url = credentials.get("webhook_url")
