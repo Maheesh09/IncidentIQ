@@ -14,7 +14,7 @@ alembic==1.13.3
 
 # LangGraph + LangChain + Gemini
 langgraph==0.2.28
-langchain==0.3.27
+langchain==0.3.30
 langchain-core==0.3.85
 langchain-text-splitters==0.3.9
 langsmith==0.8.18
