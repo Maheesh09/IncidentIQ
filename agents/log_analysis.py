@@ -113,7 +113,7 @@ No explanation, no markdown, no code fences — just the raw JSON.
         }
 
     except Exception as e:
-        logger.error(f"Log analysis LLM reasoning failed: {e}")
+        logging.exception(f"Log analysis LLM reasoning failed: {e}")
         return {
             "anomalies": [],
             "log_summary": "LLM reasoning failed — see raw error patterns for manual analysis",
@@ -198,7 +198,7 @@ async def analyze_logs_node(state: IncidentState) -> dict:
         return {"log_findings": log_findings}
 
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Log analysis agent failed for incident {incident_id}: {e}"
         )
         return {

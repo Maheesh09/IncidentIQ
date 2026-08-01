@@ -73,7 +73,7 @@ async def run_pipeline(
             "filter in your log source configuration match your environment, "
             "and that the incident timestamp is correct."
         )
-        logger.error(f"Incident {incident_id} aborted — {reason}")
+        logging.exception(f"Incident {incident_id} aborted — {reason}")
         await _mark_incident_failed(incident_id, reason)
         return
 
@@ -216,12 +216,12 @@ async def run_pipeline(
                     final_report=final_report,
                 )
 
-            logger.info(
+            logging.info(
                 f"Pipeline completed successfully for incident {incident_id}"
             )
 
         except Exception as e:
-            logger.error(f"Pipeline failed for incident {incident_id}: {e}")
+            logging.exception(f"Pipeline failed for incident {incident_id}: {e}")
             try:
                 result = await db.execute(
                     select(Incident).where(Incident.id == incident_id)
@@ -232,7 +232,7 @@ async def run_pipeline(
                     incident.completed_at = datetime.now(timezone.utc).isoformat()
                 await db.commit()
             except Exception as db_error:
-                logger.error(
+                logging.exception(
                     f"Failed to mark incident {incident_id} as failed: {db_error}"
                 )
                 
@@ -313,7 +313,7 @@ async def _fetch_logs_for_incident(
         Log content as a plain string ready for the pipeline.
     """
     if not organisation_id:
-        logger.info("No organisation_id — using manual logs")
+        logging.info("No organisation_id — using manual logs")
         return raw_logs
 
     async with AsyncSessionLocal() as db:
@@ -326,7 +326,7 @@ async def _fetch_logs_for_incident(
         log_source = result.scalar_one_or_none()
 
     if not log_source or log_source.source_type == "manual":
-        logger.info(
+        logging.info(
             f"Org {organisation_id} using manual log upload"
         )
         return raw_logs
@@ -335,7 +335,7 @@ async def _fetch_logs_for_incident(
     try:
         credentials = await retrieve_secret(log_source.secret_name)
     except RuntimeError as e:
-        logger.error(
+        logging.exception(
             f"Failed to retrieve credentials for org {organisation_id}: {e}"
             f" — falling back to manual logs"
         )
@@ -374,21 +374,21 @@ async def _fetch_logs_for_incident(
         )
 
         if fetched_logs:
-            logger.info(
+            logging.info(
                 f"Fetched {len(fetched_logs)} chars of logs "
                 f"via {log_source.source_type} connector "
                 f"for org {organisation_id}"
             )
             return fetched_logs
 
-        logger.warning(
+        logging.warning(
             f"Connector returned empty logs for org {organisation_id} "
             f"— falling back to manual logs"
         )
         return raw_logs
 
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Connector failed for org {organisation_id}: {e} "
             f"— falling back to manual logs"
         )
@@ -422,12 +422,12 @@ async def _deliver_webhook_for_org(
         webhook_config = result.scalar_one_or_none()
 
         if not webhook_config:
-            logger.info(
+            logging.info(
                 f"No webhook configured for org {organisation_id}"
             )
             return
 
-        logger.info(
+        logging.info(
             f"Delivering webhook for incident {incident_id} "
             f"to {webhook_config.url}"
         )
@@ -449,11 +449,11 @@ async def _deliver_webhook_for_org(
         await db.commit()
 
         if success:
-            logger.info(
+            logging.info(
                 f"Webhook delivered for incident {incident_id}"
             )
         else:
-            logger.error(
+            logging.exception(
                 f"Webhook delivery failed for incident {incident_id}"
             )    
 
@@ -480,7 +480,7 @@ async def _mark_incident_failed(incident_id: str, reason: str) -> None:
                 incident.completed_at = datetime.now(timezone.utc).isoformat()
                 await db.commit()
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Could not mark incident {incident_id} as failed: {e}"
         )            
 
@@ -514,7 +514,7 @@ async def _deliver_notifications_for_org(
             configs = {n.notification_type: n for n in result.scalars()}
 
             if not configs:
-                logger.info(
+                logging.info(
                     f"No notification channels configured for org {organisation_id}"
                 )
                 return
@@ -562,14 +562,14 @@ async def _deliver_notifications_for_org(
                 config.last_notified_at = now
 
                 if isinstance(outcome, Exception):
-                    logger.error(
+                    logging.exception(
                         f"{channel} notification raised for incident "
                         f"{incident_id}: {outcome}"
                     )
                     config.last_notification_status = "failed"
                 elif outcome is True:
                     config.last_notification_status = "success"
-                    logger.info(
+                    logging.info(
                         f"{channel} notification delivered for {incident_id}"
                     )
                 else:
@@ -577,7 +577,7 @@ async def _deliver_notifications_for_org(
 
             await db.commit()
     except Exception as e:
-        logger.error(
+        logging.exception(
             f"Notification delivery failed for org {organisation_id}, "
             f"incident {incident_id}: {e}"
         )        
