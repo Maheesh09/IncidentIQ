@@ -1,4 +1,12 @@
 # .trivyignore
-# langgraph-checkpoint RCE — fix requires langgraph major upgrade (Phase 4 task).
-# JsonPlusSerializer "json" mode RCE; we do not deserialize untrusted checkpoints.
+# langgraph-checkpoint RCE — fix needs langgraph major upgrade (tracked, Phase 4).
 CVE-2025-64439
+
+# Starlette CVEs are all in StaticFiles / file-response features we do not use.
+# Fix requires FastAPI 0.115 -> 0.141 (major surface change) — tracked separately.
+CVE-2026-48818
+CVE-2025-62727
+CVE-2026-54283
+
+# wheel PrivEsc — build-time dependency only, never present in the runtime image.
+CVE-2026-24049
