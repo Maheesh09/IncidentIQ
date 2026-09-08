@@ -60,3 +60,25 @@ def hash_api_key_legacy_sha256(raw_key: str) -> str:
         Hex-encoded SHA-256 hash string.
     """
     return hashlib.sha256(raw_key.encode()).hexdigest()
+
+
+def verify_admin_secret(provided: str | None) -> bool:
+    """Verify a provided admin bootstrap secret against the configured value.
+
+    Uses a constant-time comparison to avoid leaking the secret through
+    response-timing differences.
+
+    Args:
+        provided: The secret sent by the caller, or None if absent.
+
+    Returns:
+        True if the secret is configured and matches, False otherwise.
+    """
+    configured = settings.admin_bootstrap_secret
+
+    # Fail closed: no configured secret means the endpoint is shut,
+    # not open. An unset secret must never authorise anything.
+    if not configured or not provided:
+        return False
+
+    return hmac.compare_digest(provided, configured)
