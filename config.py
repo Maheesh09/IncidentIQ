@@ -20,14 +20,16 @@ class Settings(BaseSettings):
     # GitHub
     github_pat: str
 
-    # Add this to the Settings class
+    # GCP
     gcp_project_id: str | None = None
 
     # API key pepper for hashing
     api_key_pepper: str
 
-    # CORS configuration - must be set explicitly in production
-    # Example: CORS_ALLOWED_ORIGINS=["https://app.example.com","https://dashboard.example.com"]
+    # Secret for bootstrapping admin users
+    admin_bootstrap_secret: str | None = None
+
+    # CORS configuration
     cors_allowed_origins: list[str] = ["http://localhost:3000"]
 
     # Pipeline behaviour

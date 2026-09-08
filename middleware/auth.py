@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import AsyncSessionLocal
 from models.incident import APIKey, Organisation
-from utils.auth import hash_api_key, hash_api_key_legacy_sha256
+from utils.auth import hash_api_key, hash_api_key_legacy_sha256, verify_admin_secret
 
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,11 +23,14 @@ PUBLIC_ROUTES = {
     "/docs",
     "/openapi.json",
     "/redoc",
-    "/management/organisations",
 }
 
 # Route prefixes that don't require authentication
 PUBLIC_PREFIXES = ()
+
+ADMIN_BOOTSTRAP_ROUTES = {
+    ("POST", "/management/organisations")
+}
 
 # Only refresh last_used_at if the recorded value is older than this.
 # Prevents a database write on every single authenticated request while
@@ -104,6 +107,23 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     "detail": "Missing API key — include Authorization: Bearer <key>"
                 },
             )
+
+        if (request.method, request.url.path) in ADMIN_BOOTSTRAP_ROUTES:
+            if verify_admin_secret(request.headers.get("X-Admin-Secret")):
+                logger.info(
+                    f"Admin bootstrap request accepted for "
+                    f"{request.method} {request.url.path}"
+                )
+                return await call_next(request)
+
+            logger.warning(
+                f"Rejected admin bootstrap attempt for "
+                f"{request.method} {request.url.path}"
+            )
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Administrator credentials required"},
+            )    
 
         raw_key = auth_header.removeprefix("Bearer ").strip()
         if not raw_key.startswith("iqk_live_"):

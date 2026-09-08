@@ -157,7 +157,7 @@ All endpoints require `Authorization: Bearer <api_key>` except where marked publ
 |---|---|---|
 | `POST` | `/management/organisations` | Register an organisation · **public** |
 | `POST` | `/management/log-source` | Configure a log connector |
-| `POST` | `/management/webhook` | Configure RCA report delivery |
+| `POST` | `/management/webhook` | Configure RCA report delivery — see [verifying webhook signatures](docs/webhooks.md) |
 | `GET` | `/management/organisations/me` | View current configuration |
 | `GET` | `/health` | Health check · **public** |
 
