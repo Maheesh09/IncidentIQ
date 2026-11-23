@@ -18,7 +18,6 @@ from models.management_schemas import (
     LogSourceResponse,
     NotificationRequest,
     NotificationResponse,
-    NotificationStatusResponse,
     OrganisationDetailsResponse,
     OrganisationRequest,
     OrganisationResponse,

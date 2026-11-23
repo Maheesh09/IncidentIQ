@@ -7,7 +7,6 @@ import uuid
 from sqlalchemy import ARRAY, Integer, String, Text, ForeignKey, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql import func
 from database import Base
 
 ORGANISATIONS_ID = "organisations.id"

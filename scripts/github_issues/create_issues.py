@@ -279,22 +279,22 @@ def clean(text: str) -> str:
     out, in_code = [], False
     for paragraph in text.split("\n\n"):
         lines = paragraph.split("\n")
-        if any(l.lstrip().startswith("```") for l in lines):
-            in_code = not in_code if sum(l.lstrip().startswith("```") for l in lines) % 2 else in_code
+        if any(line.lstrip().startswith("```") for line in lines):
+            in_code = not in_code if sum(line.lstrip().startswith("```") for line in lines) % 2 else in_code
             out.append(paragraph)
-        elif in_code or any(l.lstrip().startswith(("|", "- ", "* ", "#", ">")) for l in lines):
+        elif in_code or any(line.lstrip().startswith(("|", "- ", "* ", "#", ">")) for line in lines):
             out.append(paragraph)
         else:
-            out.append(" ".join(l.strip() for l in lines))
+            out.append(" ".join(line.strip() for line in lines))
     return "\n\n".join(out)
 
 
 def checklist(lines) -> str:
-    return "\n".join("- [ ] " + indent_continuation(l) for l in lines)
+    return "\n".join("- [ ] " + indent_continuation(line) for line in lines)
 
 
 def bullets(lines) -> str:
-    return "\n".join("- " + indent_continuation(l) for l in lines)
+    return "\n".join("- " + indent_continuation(line) for line in lines)
 
 
 def indent_continuation(text: str) -> str:
