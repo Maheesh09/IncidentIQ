@@ -16,6 +16,21 @@ MAX_RETRIES = 1
 RETRY_DELAY_SECONDS = 2
 
 
+def _agent_errors(node_fn: Callable, result: dict) -> list[str]:
+    """Errors in a node's result that belong to that node's agent."""
+    agent_name = node_fn.__name__.replace("_node", "")
+    return [e for e in result.get("errors", []) if agent_name in e]
+
+
+async def _wait_before_retry(node_fn: Callable, state: IncidentState, attempt: int) -> None:
+    logger.warning(
+        f"Retrying {node_fn.__name__} for incident "
+        f"{state['incident_id']} "
+        f"(attempt {attempt + 1} of {MAX_RETRIES + 1})"
+    )
+    await asyncio.sleep(RETRY_DELAY_SECONDS)
+
+
 def with_retry(node_fn: Callable) -> Callable:
     """Wrap a LangGraph agent node with automatic retry on failure.
 
@@ -41,44 +56,31 @@ def with_retry(node_fn: Callable) -> Callable:
         last_exception = None
 
         for attempt in range(MAX_RETRIES + 1):
-            try:
-                if attempt > 0:
-                    logger.warning(
-                        f"Retrying {node_fn.__name__} for incident "
-                        f"{state['incident_id']} "
-                        f"(attempt {attempt + 1} of {MAX_RETRIES + 1})"
-                    )
-                    await asyncio.sleep(RETRY_DELAY_SECONDS)
+            if attempt > 0:
+                await _wait_before_retry(node_fn, state, attempt)
 
+            try:
                 result = await node_fn(state)
                 last_result = result
-
-                # Check if the agent reported an error in its result
-                # If no error keys are present, consider it a success
-                agent_errors = [
-                    e for e in result.get("errors", [])
-                    if node_fn.__name__.replace("_node", "") in e
-                ]
-
-                if not agent_errors:
-                    return result
-
-                # Agent returned errors — retry if attempts remain
-                if attempt < MAX_RETRIES:
-                    logger.warning(
-                        f"{node_fn.__name__} returned errors on attempt "
-                        f"{attempt + 1}: {agent_errors}"
-                    )
-                    continue
-
+                agent_errors = _agent_errors(node_fn, result)
             except Exception as e:
                 last_exception = e
-                logger.error(
+                logger.exception(
                     f"{node_fn.__name__} raised exception on attempt "
                     f"{attempt + 1}: {e}"
                 )
-                if attempt < MAX_RETRIES:
-                    continue
+                continue
+
+            # If no error keys for this agent are present, consider it a success
+            if not agent_errors:
+                return result
+
+            # Agent returned errors — retry if attempts remain
+            if attempt < MAX_RETRIES:
+                logger.warning(
+                    f"{node_fn.__name__} returned errors on attempt "
+                    f"{attempt + 1}: {agent_errors}"
+                )
 
         # All attempts exhausted — return last result or error state
         if last_exception and not last_result:

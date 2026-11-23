@@ -107,9 +107,8 @@ def referenced_keys(item: dict) -> list[str]:
     return keys
 
 
-def validate(items: list[dict]) -> None:
+def _duplicate_errors(items: list[dict]) -> list[str]:
     errors = []
-    label_names = {name for name, _, _ in data.LABELS}
     keys = [i["key"] for i in items]
     dupes = {k for k in keys if keys.count(k) > 1}
     if dupes:
@@ -118,28 +117,57 @@ def validate(items: list[dict]) -> None:
     dupe_titles = {t for t in titles if titles.count(t) > 1}
     if dupe_titles:
         errors.append(f"duplicate titles: {sorted(dupe_titles)}")
+    return errors
 
-    position = {k: n for n, k in enumerate(keys)}
+
+def _issue_field_errors(item: dict, label_names: set[str]) -> list[str]:
+    k = item["key"]
+    errors = []
+    if item.get("type") not in TYPE_PREFIX:
+        errors.append(f"{k}: type must be one of {list(TYPE_PREFIX)}")
+    errors += [
+        f"{k}: missing {field}"
+        for field in ("title", "summary", "tasks", "acceptance", "priority", "size")
+        if not item.get(field)
+    ]
+    errors += [
+        f"{k}: label '{label}' is not defined in LABELS"
+        for label in labels_for(item)
+        if label not in label_names
+    ]
+    return errors
+
+
+def _reference_errors(item: dict, position: dict[str, int]) -> list[str]:
+    k = item["key"]
+    errors = []
+    for ref in referenced_keys(item):
+        if ref not in position:
+            errors.append(f"{k}: references unknown key {ref}")
+        elif position[ref] >= position[k]:
+            errors.append(f"{k}: references {ref}, which comes later in the plan")
+    return errors
+
+
+def _item_errors(item: dict, label_names: set[str], position: dict[str, int]) -> list[str]:
+    k = item["key"]
+    errors = []
+    if item["repo"] not in data.REPOS:
+        errors.append(f"{k}: unknown repo {item['repo']}")
+    if item["step"] not in data.MILESTONES:
+        errors.append(f"{k}: unknown step {item['step']}")
+    if item["kind"] == "issue":
+        errors += _issue_field_errors(item, label_names)
+    errors += _reference_errors(item, position)
+    return errors
+
+
+def validate(items: list[dict]) -> None:
+    label_names = {name for name, _, _ in data.LABELS}
+    position = {item["key"]: n for n, item in enumerate(items)}
+    errors = _duplicate_errors(items)
     for item in items:
-        k = item["key"]
-        if item["repo"] not in data.REPOS:
-            errors.append(f"{k}: unknown repo {item['repo']}")
-        if item["step"] not in data.MILESTONES:
-            errors.append(f"{k}: unknown step {item['step']}")
-        if item["kind"] == "issue":
-            if item.get("type") not in TYPE_PREFIX:
-                errors.append(f"{k}: type must be one of {list(TYPE_PREFIX)}")
-            for field in ("title", "summary", "tasks", "acceptance", "priority", "size"):
-                if not item.get(field):
-                    errors.append(f"{k}: missing {field}")
-            for label in labels_for(item):
-                if label not in label_names:
-                    errors.append(f"{k}: label '{label}' is not defined in LABELS")
-        for ref in referenced_keys(item):
-            if ref not in position:
-                errors.append(f"{k}: references unknown key {ref}")
-            elif position[ref] >= position[k]:
-                errors.append(f"{k}: references {ref}, which comes later in the plan")
+        errors += _item_errors(item, label_names, position)
     if errors:
         raise SystemExit("issues_data.py is invalid:\n  " + "\n  ".join(errors))
 
@@ -332,13 +360,11 @@ def link_sub_issue(epic_number: int, child: dict, child_number: int) -> None:
 
 # ------------------------------------------------------------------------ main
 
-def main() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true", help="validate and print, write nothing to GitHub")
-    p.add_argument("--preview", metavar="FILE", help="write every rendered issue to a Markdown file")
+    p.add_argument("--preview", metavar="FILE",
+                   help="write every rendered issue to a Markdown file inside the current directory")
     p.add_argument("--repo", choices=["backend", "frontend", "all"], default="all")
     p.add_argument("--step", type=int, action="append", help="limit to roadmap step(s); repeatable")
     p.add_argument("--no-epics", action="store_true", help="skip the per-step tracking issues")
@@ -346,38 +372,121 @@ def main() -> None:
     p.add_argument("--link-sub-issues", action="store_true", help="attach issues to their epic as GitHub sub-issues")
     p.add_argument("--offline", action="store_true", help="with --dry-run: do not call GitHub at all")
     args = p.parse_args()
-
     if args.offline and not args.dry_run:
         raise SystemExit("--offline only works together with --dry-run")
+    return args
+
+
+def safe_preview_path(raw: str) -> Path:
+    """Resolve the --preview target and refuse anything outside the working directory."""
+    base = Path.cwd().resolve()
+    target = (base / raw).resolve()
+    if not target.is_relative_to(base):
+        raise SystemExit(f"--preview must point inside the current directory ({base}), got: {raw}")
+    if target.suffix.lower() != ".md":
+        raise SystemExit("--preview must be a Markdown (.md) file")
+    return target
+
+
+def select_items(items: list[dict], repos: list[str], steps: set[int], no_epics: bool) -> list[dict]:
+    return [
+        i for i in items
+        if i["repo"] in repos and i["step"] in steps and not (no_epics and i["kind"] == "epic")
+    ]
+
+
+def fetch_existing_numbers(items: list[dict]) -> dict[str, int]:
+    """Numbers of issues already on GitHub, in both repos (needed for cross-repo refs)."""
+    check_account()
+    numbers: dict[str, int] = {}
+    for repo in data.REPOS:
+        existing = existing_issue_numbers(repo)
+        for item in items:
+            title = full_title(item)
+            if item["repo"] == repo and title in existing:
+                numbers[item["key"]] = existing[title]
+    return numbers
+
+
+def unresolved_references(selected: list[dict], numbers: dict[str, int]) -> list[str]:
+    """References that are neither created earlier in this run nor already on GitHub."""
+    selected_keys = {i["key"] for i in selected}
+    return sorted({
+        f"{i['key']} -> {ref}"
+        for i in selected if i["kind"] == "issue"
+        for ref in referenced_keys(i)
+        if ref not in selected_keys and ref not in numbers
+    })
+
+
+def preview_entry(item: dict, body: str) -> str:
+    return (
+        f"# {slug(item['repo'])}: {full_title(item)}\n\n"
+        f"Labels: {', '.join(labels_for(item))}  \n"
+        f"Milestone: {data.MILESTONES[item['step']]['title']}\n\n{body}\n---\n"
+    )
+
+
+def publish_item(item: dict, body: str, numbers: dict[str, int], args: argparse.Namespace) -> str:
+    """Create, update or report one item. Returns "created", "skipped" or "planned"."""
+    is_epic = item["kind"] == "epic"
+    title = full_title(item)
+    tag = f"{item['repo']:<8} {item['key']:<8}"
+    existing = numbers.get(item["key"])
+
+    if existing is not None:
+        if is_epic and not args.dry_run:
+            gh("issue", "edit", str(existing), "-R", slug("backend"), "--body-file", "-", stdin=body)
+            print(f"  updated  {tag} #{existing:<4} {title}")
+        else:
+            print(f"  exists   {tag} #{existing:<4} {title}")
+        return "skipped"
+
+    if args.dry_run:
+        print(f"  would    {tag}       {title}")
+        return "planned"
+
+    number = create_issue(item, body, args.assign_me)
+    numbers[item["key"]] = number
+    print(f"  created  {tag} #{number:<4} {title}")
+    time.sleep(CREATE_DELAY_SECONDS)
+    return "created"
+
+
+def link_epic_children(epic: dict, items: list[dict], numbers: dict[str, int]) -> None:
+    for child in items:
+        if child["kind"] == "issue" and child["step"] == epic["step"] and child["key"] in numbers:
+            link_sub_issue(numbers[epic["key"]], child, numbers[child["key"]])
+
+
+def print_dry_run_summary(selected: list[dict], skipped: int, missing: list[str]) -> None:
+    by_type: dict[str, int] = {}
+    for i in selected:
+        t = "epic" if i["kind"] == "epic" else i["type"]
+        by_type[t] = by_type.get(t, 0) + 1
+    print(f"\nDry run: {len(selected)} items ({', '.join(f'{v} {k}' for k, v in sorted(by_type.items()))}). "
+          f"{skipped} already exist. Nothing was written.")
+    if missing:
+        print("Unresolved references (fine for a dry run, would block a filtered live run):\n  " + "\n  ".join(missing))
+
+
+def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    args = parse_args()
+    preview_path = safe_preview_path(args.preview) if args.preview else None
 
     items = build_items()
     validate(items)
 
     repos = list(data.REPOS) if args.repo == "all" else [args.repo]
     steps = set(args.step) if args.step else set(data.MILESTONES)
-    selected = [
-        i for i in items
-        if i["repo"] in repos and i["step"] in steps and not (args.no_epics and i["kind"] == "epic")
-    ]
+    selected = select_items(items, repos, steps, args.no_epics)
 
-    # Numbers of issues already on GitHub, in both repos (needed for cross-repo refs).
-    numbers: dict[str, int] = {}
-    if not args.offline:
-        check_account()
-        for repo in data.REPOS:
-            existing = existing_issue_numbers(repo)
-            for item in items:
-                if item["repo"] == repo and full_title(item) in existing:
-                    numbers[item["key"]] = existing[full_title(item)]
+    numbers = {} if args.offline else fetch_existing_numbers(items)
 
-    # Every reference must be satisfiable: created earlier in this run, or already on GitHub.
-    selected_keys = {i["key"] for i in selected}
-    missing = sorted({
-        f"{i['key']} -> {ref}"
-        for i in selected if i["kind"] == "issue"
-        for ref in referenced_keys(i)
-        if ref not in selected_keys and ref not in numbers
-    })
+    missing = unresolved_references(selected, numbers)
     if missing and not args.dry_run:
         raise SystemExit(
             "These references point at issues that are neither on GitHub nor selected in this run.\n"
@@ -385,7 +494,7 @@ def main() -> None:
         )
 
     renderer = Renderer(items, numbers)
-    counts = {"created": 0, "skipped": 0}
+    counts = {"created": 0, "skipped": 0, "planned": 0}
     preview: list[str] = []
 
     if not args.dry_run:
@@ -398,48 +507,17 @@ def main() -> None:
     for item in selected:
         is_epic = item["kind"] == "epic"
         body = renderer.epic_body(item, items) if is_epic else renderer.issue_body(item)
-        title = full_title(item)
-        tag = f"{item['repo']:<8} {item['key']:<8}"
-        preview.append(
-            f"# {slug(item['repo'])}: {title}\n\n"
-            f"Labels: {', '.join(labels_for(item))}  \n"
-            f"Milestone: {data.MILESTONES[item['step']]['title']}\n\n{body}\n---\n"
-        )
-
-        if item["key"] in numbers:
-            if is_epic and not args.dry_run:
-                gh("issue", "edit", str(numbers[item["key"]]), "-R", slug("backend"), "--body-file", "-", stdin=body)
-                print(f"  updated  {tag} #{numbers[item['key']]:<4} {title}")
-            else:
-                print(f"  exists   {tag} #{numbers[item['key']]:<4} {title}")
-            counts["skipped"] += 1
-        elif args.dry_run:
-            print(f"  would    {tag}       {title}")
-        else:
-            number = create_issue(item, body, args.assign_me)
-            numbers[item["key"]] = number
-            counts["created"] += 1
-            print(f"  created  {tag} #{number:<4} {title}")
-            time.sleep(CREATE_DELAY_SECONDS)
-
+        preview.append(preview_entry(item, body))
+        counts[publish_item(item, body, numbers, args)] += 1
         if is_epic and args.link_sub_issues and not args.dry_run:
-            for child in items:
-                if child["kind"] == "issue" and child["step"] == item["step"] and child["key"] in numbers:
-                    link_sub_issue(numbers[item["key"]], child, numbers[child["key"]])
+            link_epic_children(item, items, numbers)
 
-    if args.preview:
-        Path(args.preview).write_text("\n".join(preview), encoding="utf-8")
-        print(f"\nPreview written to {Path(args.preview).resolve()}")
+    if preview_path:
+        preview_path.write_text("\n".join(preview), encoding="utf-8")
+        print(f"\nPreview written to {preview_path}")
 
     if args.dry_run:
-        by_type: dict[str, int] = {}
-        for i in selected:
-            t = "epic" if i["kind"] == "epic" else i["type"]
-            by_type[t] = by_type.get(t, 0) + 1
-        print(f"\nDry run: {len(selected)} items ({', '.join(f'{v} {k}' for k, v in sorted(by_type.items()))}). "
-              f"{counts['skipped']} already exist. Nothing was written.")
-        if missing:
-            print("Unresolved references (fine for a dry run, would block a filtered live run):\n  " + "\n  ".join(missing))
+        print_dry_run_summary(selected, counts["skipped"], missing)
     else:
         print(f"\nDone: {counts['created']} created, {counts['skipped']} already existed.")
 

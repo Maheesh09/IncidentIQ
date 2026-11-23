@@ -5,15 +5,15 @@ Revises: d7f2b91c3e56
 Create Date: 2026-07-18
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = 'e4a1c83b2f97'
-down_revision: Union[str, None] = 'd7f2b91c3e56'
-branch_labels: Union[Sequence[str], None] = None
-depends_on: Union[Sequence[str], None] = None
+down_revision: str | None = 'd7f2b91c3e56'
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:

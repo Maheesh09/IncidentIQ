@@ -37,28 +37,26 @@ def _build_blocks(incident_id: str, report: dict) -> list[dict]:
     duration = report.get("analysis_duration_seconds")
     timeline = report.get("timeline") or []
 
-    blocks: list[dict] = []
-
-    # ── Header ─────────────────────────────────────────────────────────────
-    blocks.append({
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": f"🔍 RCA Complete — {incident_id}",
-            "emoji": True,
+    blocks: list[dict] = [
+        # ── Header ─────────────────────────────────────────────────────────
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"🔍 RCA Complete — {incident_id}",
+                "emoji": True,
+            },
         },
-    })
-
-    # ── Summary ────────────────────────────────────────────────────────────
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": f"*Summary*\n{summary}",
+        # ── Summary ────────────────────────────────────────────────────────
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Summary*\n{summary}",
+            },
         },
-    })
-
-    blocks.append({"type": "divider"})
+        {"type": "divider"},
+    ]
 
     # ── Top hypothesis ──────────────────────────────────────────────────────
     if root_causes:
@@ -219,7 +217,7 @@ async def send_slack_notification(
         return False
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Slack notification error for incident {incident_id}: {e}"
         )
         return False

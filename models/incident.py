@@ -10,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from database import Base
 
+ORGANISATIONS_ID = "organisations.id"
+INCIDENTS_ID = "incidents.id"
+
 
 class Incident(Base):
     """ORM model for the incidents table.
@@ -43,7 +46,7 @@ class Incident(Base):
     )
     organisation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=True,
         index=True,
     )
@@ -87,7 +90,7 @@ class APIKey(Base):
     )
     organisation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -115,7 +118,7 @@ class LogSourceConfig(Base):
     )
     organisation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         unique=True,
         nullable=False,
     )
@@ -143,7 +146,7 @@ class WebhookConfig(Base):
     )
     organisation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         unique=True,
         nullable=False,
     )
@@ -174,7 +177,7 @@ class AgentRun(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("incidents.id"), nullable=False
+        String(30), ForeignKey(INCIDENTS_ID), nullable=False
     )
     agent_type: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -185,7 +188,7 @@ class AgentRun(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     organisation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=True,
         index=True,
     )
@@ -203,7 +206,7 @@ class RCAReport(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("incidents.id"), unique=True, nullable=False
+        String(30), ForeignKey(INCIDENTS_ID), unique=True, nullable=False
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     timeline: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -215,7 +218,7 @@ class RCAReport(Base):
     )    
     organisation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=True,
         index=True,
     )
@@ -234,7 +237,7 @@ class Feedback(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[str] = mapped_column(
-        String(30), ForeignKey("incidents.id"), unique=True, nullable=False
+        String(30), ForeignKey(INCIDENTS_ID), unique=True, nullable=False
     )
     hypothesis_rank: Mapped[int] = mapped_column(Integer, nullable=False)
     verdict: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -244,7 +247,7 @@ class Feedback(Base):
     )    
     organisation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=True,
         index=True,
     )
@@ -267,7 +270,7 @@ class NotificationConfig(Base):
     )
     organisation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organisations.id"),
+        ForeignKey(ORGANISATIONS_ID),
         nullable=False,
         index=True,
     )

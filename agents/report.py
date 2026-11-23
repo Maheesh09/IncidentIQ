@@ -139,7 +139,7 @@ Guidelines:
         }
 
     except Exception as e:
-        logger.error(f"Report formatting LLM call failed: {e}")
+        logger.exception(f"Report formatting LLM call failed: {e}")
         return {
             "summary": (
                 f"Automated RCA completed for incident {incident_id}. "
@@ -226,7 +226,7 @@ async def generate_report_node(state: IncidentState) -> dict:
         return {"final_report": final_report}
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Report agent failed for incident {incident_id}: {e}"
         )
         return {

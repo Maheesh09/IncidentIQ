@@ -73,7 +73,7 @@ async def run_pipeline(
             "filter in your log source configuration match your environment, "
             "and that the incident timestamp is correct."
         )
-        logging.exception(f"Incident {incident_id} aborted — {reason}")
+        logger.error(f"Incident {incident_id} aborted — {reason}")
         await _mark_incident_failed(incident_id, reason)
         return
 
@@ -99,13 +99,7 @@ async def run_pipeline(
 
             # Record pipeline-level agent runs before invocation
             agent_runs: dict[str, AgentRun] = {}
-            for agent_type in [
-                "triage",
-                "log_analysis",
-                "deploy_correlation",
-                "synthesis",
-                "report",
-            ]:
+            for agent_type in PIPELINE_AGENTS:
                 agent_runs[agent_type] = await _record_agent_start(
                     db, incident_id, agent_type
                 )
@@ -114,93 +108,8 @@ async def run_pipeline(
             # Run the full pipeline
             final_state = await pipeline.ainvoke(initial_state)
 
-            # Determine success or failure per agent from final state
-            errors = final_state.get("errors", [])
-
-            await _record_agent_finish(
-                db, agent_runs["triage"],
-                status="completed" if not any("triage" in e for e in errors) else "failed",
-                findings={
-                    "severity": final_state.get("severity"),
-                    "incident_type": final_state.get("incident_type"),
-                    "affected_services": final_state.get("affected_services"),
-                    "investigation_window": final_state.get("investigation_window"),
-                },
-                error_message=next(
-                    (e for e in errors if "triage" in e), None
-                ),
-            )
-
-            await _record_agent_finish(
-                db, agent_runs["log_analysis"],
-                status="completed" if final_state.get("log_findings") else "failed",
-                findings=final_state.get("log_findings"),
-                error_message=next(
-                    (e for e in errors if "log_analysis" in e), None
-                ),
-            )
-
-            await _record_agent_finish(
-                db, agent_runs["deploy_correlation"],
-                status="completed" if final_state.get("deploy_findings") else "failed",
-                findings=final_state.get("deploy_findings"),
-                error_message=next(
-                    (e for e in errors if "deploy_correlation" in e), None
-                ),
-            )
-
-            await _record_agent_finish(
-                db, agent_runs["synthesis"],
-                status="completed" if final_state.get("hypotheses") else "failed",
-                findings={"hypotheses": final_state.get("hypotheses")},
-                error_message=next(
-                    (e for e in errors if "synthesis" in e), None
-                ),
-            )
-
-            await _record_agent_finish(
-                db, agent_runs["report"],
-                status="completed" if final_state.get("final_report") else "failed",
-                findings=final_state.get("final_report"),
-                error_message=next(
-                    (e for e in errors if "report" in e), None
-                ),
-            )
-
-            # Persist the final report to the database
-            final_report = final_state.get("final_report")
-            if final_report:
-                report = RCAReport(
-                    incident_id=incident_id,
-                    summary=final_report.get("summary", ""),
-                    timeline=final_report.get("timeline", []),
-                    hypotheses=final_report.get("root_causes", []),
-                    prevention_note=final_report.get("prevention_note"),
-                    raw_report=final_report,
-                    generated_at=datetime.now(timezone.utc).isoformat(),
-                )
-                db.add(report)
-
-            # Update incident status to completed
-            result = await db.execute(
-                select(Incident).where(Incident.id == incident_id)
-            )
-            incident = result.scalar_one_or_none()
-            if incident:
-                incident.status = "completed"
-                incident.severity = final_state.get("severity")
-                incident.incident_type = final_state.get("incident_type")
-                incident.affected_services = final_state.get("affected_services")
-                incident.investigation_window = final_state.get(
-                    "investigation_window"
-                )
-                incident.completed_at = datetime.now(timezone.utc).isoformat()
-                incident.analysis_duration_seconds = (
-                    final_report.get("analysis_duration_seconds")
-                    if final_report
-                    else None
-                )
-
+            await _record_agent_results(db, agent_runs, final_state)
+            final_report = await _persist_results(db, incident_id, final_state)
             await db.commit()
 
             # Deliver webhook after committing the report
@@ -222,20 +131,117 @@ async def run_pipeline(
 
         except Exception as e:
             logging.exception(f"Pipeline failed for incident {incident_id}: {e}")
-            try:
-                result = await db.execute(
-                    select(Incident).where(Incident.id == incident_id)
-                )
-                incident = result.scalar_one_or_none()
-                if incident:
-                    incident.status = "failed"
-                    incident.completed_at = datetime.now(timezone.utc).isoformat()
-                await db.commit()
-            except Exception as db_error:
-                logging.exception(
-                    f"Failed to mark incident {incident_id} as failed: {db_error}"
-                )
-                
+            await _mark_failed_in_session(db, incident_id)
+
+
+PIPELINE_AGENTS = (
+    "triage",
+    "log_analysis",
+    "deploy_correlation",
+    "synthesis",
+    "report",
+)
+
+
+def _first_error(errors: list[str], agent_type: str) -> str | None:
+    """Return the first pipeline error message mentioning the given agent."""
+    return next((e for e in errors if agent_type in e), None)
+
+
+async def _record_agent_results(
+    db: AsyncSession,
+    agent_runs: dict[str, AgentRun],
+    final_state: dict,
+) -> None:
+    """Mark each agent run completed or failed based on the final pipeline state."""
+    errors = final_state.get("errors", [])
+
+    await _record_agent_finish(
+        db, agent_runs["triage"],
+        status="completed" if _first_error(errors, "triage") is None else "failed",
+        findings={
+            "severity": final_state.get("severity"),
+            "incident_type": final_state.get("incident_type"),
+            "affected_services": final_state.get("affected_services"),
+            "investigation_window": final_state.get("investigation_window"),
+        },
+        error_message=_first_error(errors, "triage"),
+    )
+
+    # Remaining agents succeed when they produced output.
+    outputs = {
+        "log_analysis": final_state.get("log_findings"),
+        "deploy_correlation": final_state.get("deploy_findings"),
+        "synthesis": final_state.get("hypotheses"),
+        "report": final_state.get("final_report"),
+    }
+    for agent_type, output in outputs.items():
+        findings = {"hypotheses": output} if agent_type == "synthesis" else output
+        await _record_agent_finish(
+            db, agent_runs[agent_type],
+            status="completed" if output else "failed",
+            findings=findings,
+            error_message=_first_error(errors, agent_type),
+        )
+
+
+async def _persist_results(
+    db: AsyncSession,
+    incident_id: str,
+    final_state: dict,
+) -> dict | None:
+    """Store the RCA report and mark the incident completed. Does not commit.
+
+    Returns:
+        The final report dict, or None if the pipeline produced none.
+    """
+    final_report = final_state.get("final_report")
+    if final_report:
+        db.add(RCAReport(
+            incident_id=incident_id,
+            summary=final_report.get("summary", ""),
+            timeline=final_report.get("timeline", []),
+            hypotheses=final_report.get("root_causes", []),
+            prevention_note=final_report.get("prevention_note"),
+            raw_report=final_report,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        ))
+
+    result = await db.execute(
+        select(Incident).where(Incident.id == incident_id)
+    )
+    incident = result.scalar_one_or_none()
+    if incident:
+        incident.status = "completed"
+        incident.severity = final_state.get("severity")
+        incident.incident_type = final_state.get("incident_type")
+        incident.affected_services = final_state.get("affected_services")
+        incident.investigation_window = final_state.get("investigation_window")
+        incident.completed_at = datetime.now(timezone.utc).isoformat()
+        incident.analysis_duration_seconds = (
+            final_report.get("analysis_duration_seconds")
+            if final_report
+            else None
+        )
+    return final_report
+
+
+async def _mark_failed_in_session(db: AsyncSession, incident_id: str) -> None:
+    """Best-effort: mark the incident failed using the pipeline's own session."""
+    try:
+        result = await db.execute(
+            select(Incident).where(Incident.id == incident_id)
+        )
+        incident = result.scalar_one_or_none()
+        if incident:
+            incident.status = "failed"
+            incident.completed_at = datetime.now(timezone.utc).isoformat()
+        await db.commit()
+    except Exception as db_error:
+        logging.exception(
+            f"Failed to mark incident {incident_id} as failed: {db_error}"
+        )
+
 
 async def _record_agent_start(
     db: AsyncSession,

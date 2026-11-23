@@ -47,9 +47,11 @@ async def lifespan(app: FastAPI):
             "Replace with explicit trusted origins before deploying to production."
         )
 
-    yield
-    await engine.dispose()
-    logger.info("IncidentIQ shutting down — database connections released")
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        logger.info("IncidentIQ shutting down — database connections released")
 
 
 app = FastAPI(
