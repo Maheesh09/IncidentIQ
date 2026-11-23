@@ -1,6 +1,7 @@
 # utils/secret_manager.py
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -8,6 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 async def store_secret(secret_name: str, secret_value: dict) -> str:
+    """Store credentials in Google Cloud Secret Manager without blocking the event loop.
+
+    The Secret Manager client is synchronous, so the call runs in a worker thread.
+    See _store_secret_sync for arguments, return value and errors.
+    """
+    return await asyncio.to_thread(_store_secret_sync, secret_name, secret_value)
+
+
+def _store_secret_sync(secret_name: str, secret_value: dict) -> str:
     """Store credentials in Google Cloud Secret Manager.
 
     Args:
@@ -66,11 +76,19 @@ async def store_secret(secret_name: str, secret_value: dict) -> str:
         return secret_name
 
     except Exception as e:
-        logger.error(f"Failed to store secret {secret_name}: {e}")
+        logger.exception(f"Failed to store secret {secret_name}: {e}")
         raise RuntimeError(f"Secret storage failed: {e}") from e
 
 
 async def retrieve_secret(secret_name: str) -> dict:
+    """Retrieve credentials from Google Cloud Secret Manager without blocking the event loop.
+
+    See _retrieve_secret_sync for arguments, return value and errors.
+    """
+    return await asyncio.to_thread(_retrieve_secret_sync, secret_name)
+
+
+def _retrieve_secret_sync(secret_name: str) -> dict:
     """Retrieve credentials from Google Cloud Secret Manager.
 
     Args:
@@ -103,7 +121,7 @@ async def retrieve_secret(secret_name: str) -> dict:
         )
 
     except Exception as e:
-        logger.error(f"Failed to retrieve secret {secret_name}: {e}")
+        logger.exception(f"Failed to retrieve secret {secret_name}: {e}")
         raise RuntimeError(f"Secret retrieval failed: {e}") from e
 
 

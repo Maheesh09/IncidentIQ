@@ -143,7 +143,7 @@ class GCPLoggingConnector(BaseLogConnector):
                 "Run: pip install google-cloud-logging"
             )
         except Exception as e:
-            logger.error(f"GCP Logging fetch failed: {e}")
+            logger.exception(f"GCP Logging fetch failed: {e}")
             raise RuntimeError(f"GCP Logging error: {e}") from e
 
     async def validate_credentials(self) -> bool:

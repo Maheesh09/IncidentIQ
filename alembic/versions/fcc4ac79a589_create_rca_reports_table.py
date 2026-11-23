@@ -5,7 +5,7 @@ Revises: 77e3ab9bb5f9
 Create Date: 2026-07-11 00:58:31.302352
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -13,9 +13,9 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'fcc4ac79a589'
-down_revision: Union[str, None] = '77e3ab9bb5f9'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '77e3ab9bb5f9'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

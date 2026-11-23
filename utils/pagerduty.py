@@ -190,7 +190,7 @@ async def send_pagerduty_notification(
         return False
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"PagerDuty notification error for incident {incident_id}: {e}"
         )
         return False

@@ -134,7 +134,8 @@ async def fetch_commits_in_window(
             )
             return commits
 
-        except (GitHubNotFoundError, GitHubRateLimitError, GitHubClientError):
+        except GitHubClientError:
+            # Includes GitHubNotFoundError and GitHubRateLimitError.
             raise
         except httpx.TimeoutException:
             raise GitHubClientError(

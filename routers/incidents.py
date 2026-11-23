@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
-@router.post("/", response_model=IncidentResponse, status_code=202)
+@router.post("/", status_code=202)
 async def create_incident(
     request: IncidentRequest,
     background_tasks: BackgroundTasks,
@@ -113,7 +113,15 @@ async def create_incident(
         message=message,
     )
 
-@router.post("/{incident_id}/logs", response_model=LogUploadResponse, status_code=200)
+@router.post(
+    "/{incident_id}/logs",
+    status_code=200,
+    responses={
+        400: {"description": "Log file exceeds the maximum size"},
+        404: {"description": "Incident not found"},
+        409: {"description": "Logs were already uploaded for this incident"},
+    },
+)
 async def upload_logs(
     incident_id: str,
     background_tasks: BackgroundTasks,
@@ -184,7 +192,11 @@ async def upload_logs(
         status="processing",
     )
 
-@router.get("/{incident_id}", response_model=IncidentStatusResponse, status_code=200)
+@router.get(
+    "/{incident_id}",
+    status_code=200,
+    responses={404: {"description": "Incident not found"}},
+)
 async def get_incident_status(
     incident_id: str,
     db: AsyncSession = Depends(get_db),
@@ -237,7 +249,14 @@ async def get_incident_status(
         error_message=incident.error_message,
     )
 
-@router.get("/{incident_id}/report", response_model=RCAReportResponse, status_code=200)
+@router.get(
+    "/{incident_id}/report",
+    status_code=200,
+    responses={
+        404: {"description": "Incident or report not found"},
+        409: {"description": "Report not yet available for the incident's current status"},
+    },
+)
 async def get_incident_report(
     incident_id: str,
     db: AsyncSession = Depends(get_db),
@@ -298,7 +317,15 @@ async def get_incident_report(
         analysis_duration_seconds=incident.analysis_duration_seconds,
     )
 
-@router.post("/{incident_id}/feedback", response_model=FeedbackResponse, status_code=200)
+@router.post(
+    "/{incident_id}/feedback",
+    status_code=200,
+    responses={
+        400: {"description": "actual_cause is required when verdict is 'rejected'"},
+        404: {"description": "Incident not found"},
+        409: {"description": "Incident is not completed, or feedback was already submitted"},
+    },
+)
 async def submit_feedback(
     incident_id: str,
     request: FeedbackRequest,

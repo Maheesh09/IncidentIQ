@@ -36,8 +36,8 @@ router = APIRouter(prefix="/management", tags=["management"])
 
 @router.post(
     "/organisations",
-    response_model=OrganisationResponse,
     status_code=201,
+    responses={409: {"description": "An organisation with this name already exists"}},
 )
 async def register_organisation(
     request: OrganisationRequest,
@@ -103,8 +103,8 @@ async def register_organisation(
 
 @router.post(
     "/log-source",
-    response_model=LogSourceResponse,
     status_code=200,
+    responses={400: {"description": "Credentials are missing required fields"}},
 )
 
 async def configure_log_source(
@@ -206,7 +206,6 @@ async def configure_log_source(
 
 @router.post(
     "/webhook",
-    response_model=WebhookResponse,
     status_code=200,
 )
 async def configure_webhook(
@@ -258,7 +257,6 @@ async def configure_webhook(
 
 @router.post(
     "/notifications",
-    response_model=NotificationResponse,
     status_code=200,
 )
 async def configure_notification(
@@ -339,8 +337,8 @@ async def configure_notification(
 
 @router.get(
     "/organisations/me",
-    response_model=OrganisationDetailsResponse,
     status_code=200,
+    responses={404: {"description": "Organisation not found"}},
 )
 async def get_organisation_details(
     request: Request,

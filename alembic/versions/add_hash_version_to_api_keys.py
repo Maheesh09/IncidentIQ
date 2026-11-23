@@ -5,14 +5,14 @@ Revises: e4a1c83b2f97
 Create Date: 2026-08-01
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 from alembic import op
 import sqlalchemy as sa
 
 revision: str = 'f8b3d24c9e71'
-down_revision: Union[str, None] = 'e4a1c83b2f97'
-branch_labels: Union[Sequence[str], None] = None
-depends_on: Union[Sequence[str], None] = None
+down_revision: str | None = 'e4a1c83b2f97'
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:

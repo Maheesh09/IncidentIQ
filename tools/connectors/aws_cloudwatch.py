@@ -121,7 +121,7 @@ class AWSCloudWatchConnector(BaseLogConnector):
                 "boto3 not installed. Run: pip install boto3"
             )
         except Exception as e:
-            logger.error(f"CloudWatch fetch failed: {e}")
+            logger.exception(f"CloudWatch fetch failed: {e}")
             raise RuntimeError(f"CloudWatch error: {e}") from e
 
     async def validate_credentials(self) -> bool:

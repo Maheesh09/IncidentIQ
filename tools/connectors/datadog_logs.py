@@ -131,7 +131,7 @@ class DatadogLogsConnector(BaseLogConnector):
         except RuntimeError:
             raise
         except Exception as e:
-            logger.error(f"Datadog logs fetch failed: {e}")
+            logger.exception(f"Datadog logs fetch failed: {e}")
             raise RuntimeError(f"Datadog error: {e}") from e
 
     async def validate_credentials(self) -> bool:

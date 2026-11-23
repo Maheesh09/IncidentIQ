@@ -109,7 +109,7 @@ async def deliver_webhook(
                     f"for incident {incident_id}"
                 )
             except Exception as e:
-                logger.error(
+                logger.exception(
                     f"Webhook delivery attempt {attempt + 1} error "
                     f"for incident {incident_id}: {e}"
                 )

@@ -5,7 +5,7 @@ Revises: e1e1a3aaa211
 Create Date: 2026-07-14 15:48:09.264981
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -13,9 +13,12 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'a6a50c5199e1'
-down_revision: Union[str, None] = 'e1e1a3aaa211'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = 'e1e1a3aaa211'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+NOW = 'now()'
+ORGANISATIONS_ID = 'organisations.id'
 
 
 def upgrade() -> None:
@@ -24,7 +27,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('is_active', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.String(length=50), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.String(length=50), server_default=sa.text(NOW), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('api_keys',
@@ -34,9 +37,9 @@ def upgrade() -> None:
     sa.Column('key_hash', sa.String(length=64), nullable=False),
     sa.Column('key_prefix', sa.String(length=12), nullable=False),
     sa.Column('is_active', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.String(length=50), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.String(length=50), server_default=sa.text(NOW), nullable=False),
     sa.Column('last_used_at', sa.String(length=50), nullable=True),
-    sa.ForeignKeyConstraint(['organisation_id'], ['organisations.id'], ),
+    sa.ForeignKeyConstraint(['organisation_id'], [ORGANISATIONS_ID], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('key_hash')
     )
@@ -47,9 +50,9 @@ def upgrade() -> None:
     sa.Column('secret_name', sa.String(length=255), nullable=False),
     sa.Column('config_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_active', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.String(length=50), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.String(length=50), server_default=sa.text(NOW), nullable=False),
     sa.Column('updated_at', sa.String(length=50), nullable=True),
-    sa.ForeignKeyConstraint(['organisation_id'], ['organisations.id'], ),
+    sa.ForeignKeyConstraint(['organisation_id'], [ORGANISATIONS_ID], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('organisation_id')
     )
@@ -59,11 +62,11 @@ def upgrade() -> None:
     sa.Column('url', sa.Text(), nullable=False),
     sa.Column('secret', sa.String(length=255), nullable=False),
     sa.Column('is_active', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.String(length=50), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.String(length=50), server_default=sa.text(NOW), nullable=False),
     sa.Column('updated_at', sa.String(length=50), nullable=True),
     sa.Column('last_delivered_at', sa.String(length=50), nullable=True),
     sa.Column('last_delivery_status', sa.String(length=20), nullable=True),
-    sa.ForeignKeyConstraint(['organisation_id'], ['organisations.id'], ),
+    sa.ForeignKeyConstraint(['organisation_id'], [ORGANISATIONS_ID], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('organisation_id')
     )

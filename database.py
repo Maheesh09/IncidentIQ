@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -43,7 +44,7 @@ class Base(DeclarativeBase):
     pass
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields an async database session.
 
     Commits on success, rolls back on any exception, always closes.
