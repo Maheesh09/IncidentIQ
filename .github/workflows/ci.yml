@@ -37,7 +37,8 @@ jobs:
           cache-dependency-path: requirements-dev.txt
 
       - name: Install ruff
-        run: pip install -r requirements-dev.txt
+        # Hash-locked, wheels only: no setup scripts run at install time.
+        run: pip install --require-hashes --only-binary :all: -r requirements-dev.txt
 
       - name: Run ruff
         run: ruff check . --output-format github
@@ -66,7 +67,7 @@ jobs:
 
       - name: Install dependencies
         # Same hash-locked set the Docker image installs.
-        run: pip install --require-hashes -r requirements.lock
+        run: pip install --require-hashes --only-binary :all: -r requirements.lock
 
       - name: Import smoke test
         run: python -c "import main"
