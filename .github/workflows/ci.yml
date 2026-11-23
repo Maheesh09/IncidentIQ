@@ -1,0 +1,102 @@
+# .github/workflows/ci.yml
+# Fast checks on every pull request, so problems are caught before they
+# reach main and deploy. Pytest with a Postgres service is added in Step 8.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same minor version as the Dockerfile base image (python:3.11-alpine).
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install ruff
+        run: pip install -r requirements-dev.txt
+
+      - name: Run ruff
+        run: ruff check . --output-format github
+
+  app-checks:
+    name: Import and migration checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # config.Settings() is built at import time, so required settings need
+      # dummy values. Nothing connects to them.
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+      GEMINI_API_KEY: ci-dummy
+      GITHUB_PAT: ci-dummy
+      API_KEY_PEPPER: ci-dummy
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install dependencies
+        # Same hash-locked set the Docker image installs.
+        run: pip install --require-hashes -r requirements.lock
+
+      - name: Import smoke test
+        run: python -c "import main"
+
+      - name: Single Alembic head
+        run: |
+          heads="$(alembic heads)"
+          echo "$heads"
+          count="$(printf '%s\n' "$heads" | grep -c '(head)' || true)"
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one Alembic head, found $count. Merge the heads with 'alembic merge'."
+            exit 1
+          fi
+
+  image:
+    name: Docker build and scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build Docker image (no push)
+        run: docker build -t incidentiq:ci-${{ github.sha }} .
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: incidentiq:ci-${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
